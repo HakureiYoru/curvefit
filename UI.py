@@ -5,7 +5,7 @@ from ttkbootstrap import Style
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.backend_bases import MouseEvent
+#from matplotlib.backend_bases import MouseEvent
 from Generate import run_gen
 from Filter import run_fit
 import math
@@ -111,6 +111,7 @@ def create_app():
 
     # Initialize generate result as None
     gen_x, gen_y = None, None
+    T_uniform = None
 
     # Create a cursor class to show the x,y position
     class Cursor(object):
@@ -135,7 +136,7 @@ def create_app():
             self.ax.figure.canvas.draw()
 
     def generate():
-        nonlocal cursor, gen_x, gen_y
+        nonlocal cursor, gen_x, gen_y, T_uniform
         try:
             T = safe_eval(entries[0].get())
             A = safe_eval(entries[1].get())
@@ -146,35 +147,50 @@ def create_app():
             p2 = safe_eval(entries[6].get())
             n = int(entries[7].get())
 
-            t, x, y = run_gen(T, A, B, w1, w2, p1, p2, n)
+            x, y = run_gen(T, A, B, w1, w2, p1, p2, n)
             ax.clear()
             ax.scatter(x, y, label='Output')
             ax.set_title('Output')
             canvas.draw()
             gen_x, gen_y = x, y  # store generated values
+            T_uniform = np.linspace(0, T, n)
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y
+        nonlocal cursor, gen_x, gen_y, T_uniform
         try:
             if gen_x is not None and gen_y is not None:  # check if data is already generated
-                ax.scatter(gen_x, gen_y, label='Output')  # draw generated data again
-            x_fit, y_fit = run_fit()
-            t = np.linspace(0, 1, len(x_fit))  # 生成与x_fit长度相同的时间序列
+                ax.scatter(gen_x, gen_y, label='Original data')  # draw generated data again
+            fit_results = run_fit()  # run_fit now returns a dict
+            fit_x, fit_y = fit_results["fit_x"], fit_results["fit_y"]
+
+            fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
+            fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
+            # x = A * np.cos(w1 * np.pi * t + p1) + np.random.normal(0, 0.02, n)  # mean,variance,count
+            # y = B * np.cos(w2 * np.pi * t + p2) + np.random.normal(0, 0.02, n)
+
+
+
 
             ax.clear()
-            ax.scatter(gen_x, gen_y,  label='original data')
-            ax.plot(x_fit, y_fit, 'r-', label='curve_fit result')
-            ax.set_title('Curve fit to data')
+            ax.scatter(gen_x, gen_y, label='Original data')
+            #ax.scatter(fit_x, fit_y, color='red', label='Filtered data')  # change to scatter for fitted points
+            ax.plot(fit_x2, fit_y2, color='red', label='Filtered data')
+            ax.set_title('Original and Filtered Data')
             ax.legend()
             canvas.draw()
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
+
+        # Display the fitted parameters
+        for param, value in fit_results.items():
+            if param != "fit_x" and param != "fit_y":
+                print(f"{param}: {value}")
 
     # Create a style for the button
     generate_button = ttk.Button(app, text="Generate", command=generate, style="success.TButton")
