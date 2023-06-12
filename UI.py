@@ -1,14 +1,13 @@
+import math
 import tkinter as tk
 import tkinter.messagebox
 from tkinter import ttk
-from ttkbootstrap import Style
 import numpy as np
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-#from matplotlib.backend_bases import MouseEvent
-from Generate import run_gen
+from ttkbootstrap import Style
 from Filter import run_fit
-import math
+from Generate import run_gen
 
 PARAMETERS = [
     {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
@@ -82,7 +81,6 @@ def create_label_and_entry(app, parameter, row):
     label_text = parameter["label"]
     preset_value = parameter["preset"]
     tooltip_text = parameter["tooltip"]
-
     label = ttk.Label(app, text=label_text, font=('Arial', 10))
     label.grid(row=row, column=0, padx=5, pady=5)
     entry = ttk.Entry(app, font=('Arial', 10))
@@ -103,13 +101,33 @@ def create_app():
     fig = Figure(figsize=(5, 5), dpi=100)
     ax = fig.add_subplot(111)
 
-    canvas = FigureCanvasTkAgg(fig, master=app)
-    canvas.get_tk_widget().grid(row=0, column=2, rowspan=8, padx=5, pady=5)
+    # Create the canvas as a child of a Frame
+    frame = tk.Frame(app)
+    frame.grid(row=0, column=2, rowspan=8, padx=5, pady=5, sticky='nsew')
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.get_tk_widget().pack(fill='both', expand=True)
 
-    # Initialize cursor as None
+
+    #checkbuttons
+    check_var1 = tk.IntVar(value=1)  # set initial to true
+    check_var2 = tk.IntVar(value=1)
+
+    check_button1 = ttk.Checkbutton(app, text="Show Original Data", variable=check_var1, style="TCheckbutton")
+    check_button1.grid(row=9, column=0, padx=10, pady=10)
+
+    check_button2 = ttk.Checkbutton(app, text="Show Filtered Data", variable=check_var2, style="TCheckbutton")
+    check_button2.grid(row=9, column=1, padx=10, pady=10)
+
+    # Checkbutton state change callback
+    def redraw_on_check():
+        filter()
+
+    # Attach the callback to the Checkbuttons
+    check_var1.trace('w', lambda *args: redraw_on_check())
+    check_var2.trace('w', lambda *args: redraw_on_check())
+
+    # Initialize
     cursor = None
-
-    # Initialize generate result as None
     gen_x, gen_y = None, None
     T_uniform = None
 
@@ -117,10 +135,8 @@ def create_app():
     class Cursor(object):
         def __init__(self, ax):
             self.ax = ax
-            self.lx = ax.axhline(color='b')  # the horizontal line
-            self.ly = ax.axvline(color='b')  # the vertical line
-
-            # text location in axes coordinates
+            self.lx = ax.axhline(color='b')
+            self.ly = ax.axvline(color='b')
             self.txt = ax.text(0.7, 0.9, '', transform=ax.transAxes)
 
         def mouse_move(self, event):
@@ -129,8 +145,8 @@ def create_app():
 
             x, y = event.xdata, event.ydata
             # update the line positions
-            self.lx.set_ydata([y])  # use a list
-            self.ly.set_xdata([x])  # use a list
+            self.lx.set_ydata([y])
+            self.ly.set_xdata([x])
 
             self.txt.set_text('x=%1.2f, y=%1.2f' % (x, y))
             self.ax.figure.canvas.draw()
@@ -162,23 +178,20 @@ def create_app():
     def filter():
         nonlocal cursor, gen_x, gen_y, T_uniform
         try:
-            if gen_x is not None and gen_y is not None:  # check if data is already generated
-                ax.scatter(gen_x, gen_y, label='Original data')  # draw generated data again
-            fit_results = run_fit()  # run_fit now returns a dict
+            fit_results = run_fit()
             fit_x, fit_y = fit_results["fit_x"], fit_results["fit_y"]
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
-            # x = A * np.cos(w1 * np.pi * t + p1) + np.random.normal(0, 0.02, n)  # mean,variance,count
-            # y = B * np.cos(w2 * np.pi * t + p2) + np.random.normal(0, 0.02, n)
-
-
-
 
             ax.clear()
-            ax.scatter(gen_x, gen_y, label='Original data')
-            #ax.scatter(fit_x, fit_y, color='red', label='Filtered data')  # change to scatter for fitted points
-            ax.plot(fit_x2, fit_y2, color='red', label='Filtered data')
+
+            if check_var1.get() == 1:
+                ax.scatter(gen_x, gen_y, label='Original data')
+
+            if check_var2.get() == 1:
+                ax.plot(fit_x2, fit_y2, color='red', label='Filtered data')
+
             ax.set_title('Original and Filtered Data')
             ax.legend()
             canvas.draw()
@@ -192,12 +205,17 @@ def create_app():
             if param != "fit_x" and param != "fit_y":
                 print(f"{param}: {value}")
 
-    # Create a style for the button
+    # style for the button
     generate_button = ttk.Button(app, text="Generate", command=generate, style="success.TButton")
-    generate_button.grid(row=8, column=0, padx=10, pady=10)
+    generate_button.grid(row=8, column=0, padx=10, pady=10, sticky='nsew')
 
     filter_button = ttk.Button(app, text="Filter", command=filter, style="info.TButton")
-    filter_button.grid(row=8, column=1, padx=10, pady=10)
+    filter_button.grid(row=8, column=1, padx=10, pady=10, sticky='nsew')
+
+    # Configure the grid to expand properly when the window is resized
+    for i in range(8):
+        app.grid_rowconfigure(i, weight=1)
+    app.grid_columnconfigure(2, weight=1)
 
     app.mainloop()
 

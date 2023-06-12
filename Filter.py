@@ -27,8 +27,9 @@ def run_fit():
     def f(beta, x):
         A, B, w1, w2, p1, p2 = beta
         dA, dB, dw1, dw2, dp1, dp2 = beta_limit
-
-        # Check parameter ranges
+        # Ensure that the parameter values are within the predefined ranges.
+        # If the parameters are outside the limits, the fit may be unreliable or not as expected
+        # Check parameter ranges (upper bound/ lower bound)
         param_check = (A >= beta_orig[0] - dA) & (A <= beta_orig[0] + dA) & \
                       (B >= beta_orig[1] - dB) & (B <= beta_orig[1] + dB) & \
                       (w1 >= beta_orig[2] - dw1) & (w1 <= beta_orig[2] + dw1) & \
@@ -38,7 +39,7 @@ def run_fit():
 
         if not np.all(param_check):
             return 0  # Return 0 if any parameter is out of range
-
+        # if out of range, no continue calculation
         t0 = ((0 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
         t1 = ((1 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
         y0calc = B * np.cos(w2 * t0 + p2)
@@ -66,6 +67,7 @@ def run_fit():
     print("------------")
     print("Stop reason:", output.stopreason)
     print("Parameters:", output.beta)
+    # This is the information code for the ODR fit. In general, info=1 indicates a successful fit.
     print("Info:", output.info)
     print("Standard Deviation of Beta:", output.sd_beta)
     print("Square root of Diagonal of Covariance:", np.sqrt(np.diag(output.cov_beta)))
