@@ -17,11 +17,10 @@ def run_fit():
         print(json_error)
         return
 
-    # Get x and y data from 'Generated Data'
     x, y = np.array(data_dict['Generated Data']).T
 
     beta_orig = np.array([params[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]])
-    beta_limit = (0.2, 0.2, 0.2, 0.2, 0.2, 0.2)  # 20%
+    beta_limit = (0.1, 0.1, 0.1, 0.1, 0.1, 0.1)  # 20%
 
     # Define the model function
     def f(beta, x):
@@ -50,7 +49,7 @@ def run_fit():
     T2data = Data(x, y, np.full_like(x, 0.01), np.full_like(y, 0.01))
     T2model = Model(f)
 
-    # Run ODR
+    # Run ODR, ifixb should be all "1" as all parameters should be considered
     myodr = ODR(T2data, T2model, beta0=beta_orig, ifixb=[1, 1, 1, 1, 1, 1])
     myodr.set_job(fit_type=0)
     output = myodr.run()
@@ -72,9 +71,6 @@ def run_fit():
     print("Standard Deviation of Beta:", output.sd_beta)
     print("Square root of Diagonal of Covariance:", np.sqrt(np.diag(output.cov_beta)))
 
-    # Define fitted y
-    fit_y = f(output.beta, x)
-
     # Return fitted parameters and fitted y values
     return {
         "A": output.beta[0],
@@ -83,6 +79,4 @@ def run_fit():
         "w2": output.beta[3],
         "p1": output.beta[4],
         "p2": output.beta[5],
-        "fit_x": x,
-        "fit_y": fit_y
     }

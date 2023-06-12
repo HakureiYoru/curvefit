@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import json
 
@@ -16,16 +15,13 @@ def run_gen(T, A, B, w1, w2, p1, p2, n):
 
     x, y = gen(T, A, B, w1, w2, p1, p2, n)
 
-    # Store as dictionary
     data = {
         "Generated Data": list(zip(x, y)),
     }
 
-    # Write data to json file
     with open('output.json', 'w') as f:
         json.dump(data, f)
 
-    # Save parameters to json file
     parameters = {"T": T, "A": A, "B": B, "w1": w1, "w2": w2, "p1": p1, "p2": p2, "n": n}
     with open('parameters.json', 'w') as f:
         json.dump(parameters, f)
@@ -33,5 +29,4 @@ def run_gen(T, A, B, w1, w2, p1, p2, n):
     print("x length:", len(x))
     print("y length:", len(y))
 
-    # Return the generated data
     return x, y

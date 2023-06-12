@@ -179,7 +179,6 @@ def create_app():
         nonlocal cursor, gen_x, gen_y, T_uniform
         try:
             fit_results = run_fit()
-            fit_x, fit_y = fit_results["fit_x"], fit_results["fit_y"]
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
