@@ -20,7 +20,9 @@ def run_fit():
     x, y = np.array(data_dict['Generated Data']).T
 
     beta_orig = np.array([params[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]])
-    beta_limit = (0.1, 0.1, 0.1, 0.1, 0.1, 0.1)  # 20%
+    beta_limit = (0.05, 0.05, 0.05, 0.05, 0.05, 0.05)  # 5%
+    # beta_limit = (0.1, 0.1, 0.1, 0.1, 0.1, 0.1)  # 10%
+    # beta_limit = (0.2, 0.2, 0.2, 0.2, 0.2, 0.2)  # 20%
 
     # Define the model function
     def f(beta, x):

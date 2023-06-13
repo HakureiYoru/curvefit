@@ -8,6 +8,9 @@ from matplotlib.figure import Figure
 from ttkbootstrap import Style
 from Filter import run_fit
 from Generate import run_gen
+import json
+import pandas as pd
+from tkinter import filedialog
 
 PARAMETERS = [
     {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
@@ -118,6 +121,85 @@ def create_app():
     check_button2 = ttk.Checkbutton(app, text="Show Filtered Data", variable=check_var2, style="TCheckbutton")
     check_button2.grid(row=9, column=1, padx=10, pady=10)
 
+    data_loaded = False
+    parameters_loaded = False
+
+    # status_label = ttk.Label(app, text="Status: Data not loaded, Parameters not loaded", font=('Arial', 10))
+    # status_label.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
+
+    status_frame = ttk.Frame(app)
+    status_frame.grid(row=11, column=0, columnspan=4, padx=5, pady=5)
+
+    data_status_label = ttk.Label(status_frame, text="Data: Not Loaded", background="red", font=('Arial', 10))
+    data_status_label.pack(side="left", fill="x", expand=True)
+
+    parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red",
+                                        font=('Arial', 10))
+    parameters_status_label.pack(side="left", fill="x", expand=True)
+
+    def load_data():
+        nonlocal gen_x, gen_y, T_uniform, data_loaded
+        file_path = filedialog.askopenfilename(filetypes=[('Data Files', '*.dat'), ('Data Files', '*.json')])
+        if file_path:
+            if file_path.endswith('.dat'):
+                df = pd.read_csv(file_path, header=None)
+                gen_x, gen_y = df[0].values, df[1].values
+
+            elif file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    data_list = data["Generated Data"]
+                    gen_x, gen_y = np.array([item[0] for item in data_list]), np.array([item[1] for item in data_list])
+
+            n = len(gen_x)
+            T = safe_eval(entries[0].get())
+            T_uniform = np.linspace(0, T, n)
+            data_loaded = True
+
+            # New code to plot the data right after loading
+            ax.clear()
+            ax.scatter(gen_x, gen_y, label='Loaded data')
+            ax.set_title('Loaded Data')
+            ax.legend()
+            canvas.draw()
+
+            update_status_label()
+        if data_loaded:
+            data_status_label.config(text="Data: Loaded", background="green")
+
+    def load_parameters():
+        file_path = filedialog.askopenfilename(filetypes=[('Parameter Files', '*.json'), ('Parameter Files', '*.dat')])
+        if file_path:
+            if file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
+                    parameters = json.load(f)
+                    for i, entry in enumerate(entries):
+                        entry.delete(0, 'end')
+                        entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
+
+            elif file_path.endswith('.dat'):
+                df = pd.read_csv(file_path, header=None)
+                parameters = df.to_dict(orient='records')[0]
+                for i, entry in enumerate(entries):
+                    entry.delete(0, 'end')
+                    entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
+
+            nonlocal T_uniform
+            n = int(entries[7].get())
+            T = safe_eval(entries[0].get())
+            T_uniform = np.linspace(0, T, n)
+
+        nonlocal parameters_loaded
+        parameters_loaded = True
+        update_status_label()
+        if parameters_loaded:
+            parameters_status_label.config(text="Parameters: Loaded", background="green")
+
+    def update_status_label():
+        if data_loaded and parameters_loaded:
+            filter_button['state'] = 'normal'
+
+
     # Checkbutton state change callback
     def redraw_on_check():
         filter()
@@ -172,6 +254,7 @@ def create_app():
             T_uniform = np.linspace(0, T, n)
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
+            filter_button['state'] = 'normal'
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
 
@@ -204,17 +287,24 @@ def create_app():
             if param != "fit_x" and param != "fit_y":
                 print(f"{param}: {value}")
 
-    # style for the button
-    generate_button = ttk.Button(app, text="Generate", command=generate, style="success.TButton")
-    generate_button.grid(row=8, column=0, padx=10, pady=10, sticky='nsew')
+    buttons_frame = ttk.Frame(app)
+    buttons_frame.grid(row=8, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
+    for i in range(4):
+        buttons_frame.grid_columnconfigure(i, weight=1)
 
-    filter_button = ttk.Button(app, text="Filter", command=filter, style="info.TButton")
-    filter_button.grid(row=8, column=1, padx=10, pady=10, sticky='nsew')
+    generate_button = ttk.Button(buttons_frame, text="Generate", command=generate, style="info.TButton")
+    generate_button.grid(row=0, column=0, padx=10, pady=10, sticky='nsew')
 
-    # Configure the grid to expand properly when the window is resized
-    for i in range(8):
-        app.grid_rowconfigure(i, weight=1)
-    app.grid_columnconfigure(2, weight=1)
+    # Here, we use buttons_frame as the parent widget instead of app
+    filter_button = ttk.Button(buttons_frame, text="Filter", command=filter, style="info.TButton", state='disabled')
+    filter_button.grid(row=0, column=1, padx=10, pady=10, sticky='nsew')
+
+    load_data_button = ttk.Button(buttons_frame, text="Load Data", command=load_data, style="info.TButton")
+    load_data_button.grid(row=0, column=2, padx=10, pady=10, sticky='nsew')
+
+    load_parameters_button = ttk.Button(buttons_frame, text="Load Parameters", command=load_parameters,
+                                        style="info.TButton")
+    load_parameters_button.grid(row=0, column=3, padx=10, pady=10, sticky='nsew')
 
     app.mainloop()
 

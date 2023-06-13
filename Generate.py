@@ -5,8 +5,8 @@ import json
 def gen(T, A, B, w1, w2, p1, p2, n):
 
     t = np.random.uniform(0, T, n)
-    x = A * np.cos(w1 * np.pi * t + p1) + np.random.normal(0, 0.02, n)  # mean,variance,count
-    y = B * np.cos(w2 * np.pi * t + p2) + np.random.normal(0, 0.02, n)
+    x = A * np.cos(w1 * np.pi * t + p1) + np.random.normal(0, 0.01, n)  # mean,variance,count
+    y = B * np.cos(w2 * np.pi * t + p2) + np.random.normal(0, 0.01, n)
 
     return x, y
 
