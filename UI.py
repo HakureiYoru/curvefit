@@ -12,6 +12,8 @@ import json
 import pandas as pd
 from tkinter import filedialog
 
+
+
 PARAMETERS = [
     {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
     {"label": "A", "preset": '1', "tooltip": 'Input range: Any positive number'},
@@ -123,19 +125,31 @@ def create_app():
 
     data_loaded = False
     parameters_loaded = False
+    beta_limit = 0
+
+    beta_limit_label = ttk.Label(app, text=f"Beta Limit: {beta_limit}")
+    beta_limit_label.grid(row=11, column=1, padx=3, pady=10, sticky='w')
+
+    def update_beta_limit(val):
+        nonlocal beta_limit
+        beta_limit = round(float(val), 4)
+        beta_limit_label.config(text=f"Beta Limit: {beta_limit}")
 
     # status_label = ttk.Label(app, text="Status: Data not loaded, Parameters not loaded", font=('Arial', 10))
     # status_label.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
 
     status_frame = ttk.Frame(app)
-    status_frame.grid(row=11, column=0, columnspan=4, padx=5, pady=5)
+    status_frame.grid(row=11, column=2, columnspan=2, padx=5, pady=0)
 
     data_status_label = ttk.Label(status_frame, text="Data: Not Loaded", background="red", font=('Arial', 10))
     data_status_label.pack(side="left", fill="x", expand=True)
 
-    parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red",
-                                        font=('Arial', 10))
+    parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red", font=('Arial', 10))
     parameters_status_label.pack(side="left", fill="x", expand=True)
+
+    scale = ttk.Scale(app, from_=0, to=0.5, orient='horizontal', command=update_beta_limit)
+    scale.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
+    scale.set(0.05)  # set initial value 5%
 
     def load_data():
         nonlocal gen_x, gen_y, T_uniform, data_loaded
@@ -168,11 +182,13 @@ def create_app():
             data_status_label.config(text="Data: Loaded", background="green")
 
     def load_parameters():
+        nonlocal params
         file_path = filedialog.askopenfilename(filetypes=[('Parameter Files', '*.json'), ('Parameter Files', '*.dat')])
         if file_path:
             if file_path.endswith('.json'):
                 with open(file_path, 'r') as f:
                     parameters = json.load(f)
+                    params = parameters
                     for i, entry in enumerate(entries):
                         entry.delete(0, 'end')
                         entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
@@ -180,6 +196,7 @@ def create_app():
             elif file_path.endswith('.dat'):
                 df = pd.read_csv(file_path, header=None)
                 parameters = df.to_dict(orient='records')[0]
+                params = parameters
                 for i, entry in enumerate(entries):
                     entry.delete(0, 'end')
                     entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
@@ -212,6 +229,7 @@ def create_app():
     cursor = None
     gen_x, gen_y = None, None
     T_uniform = None
+    params = None
 
     # Create a cursor class to show the x,y position
     class Cursor(object):
@@ -255,13 +273,14 @@ def create_app():
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
             filter_button['state'] = 'normal'
+            params = None          #To avoid conflict with load function -------------IMPORTANT
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit
         try:
-            fit_results = run_fit()
+            fit_results = run_fit(gen_x, gen_y, params, beta_limit)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
