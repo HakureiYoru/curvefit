@@ -1,7 +1,7 @@
 import math
 import tkinter as tk
-import tkinter.messagebox
-from tkinter import ttk
+import tkinter.messagebox as messagebox
+from tkinter import ttk, filedialog, Toplevel, Label, Scale
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -10,8 +10,6 @@ from Filter import run_fit
 from Generate import run_gen
 import json
 import pandas as pd
-from tkinter import filedialog
-
 
 
 PARAMETERS = [
@@ -99,6 +97,12 @@ def create_app():
     app = tk.Tk()
     app.style = Style(theme='flatly')
 
+    # Configure row and column weights
+    for i in range(12):
+        app.rowconfigure(i, weight=1)
+    for i in range(3):
+        app.columnconfigure(i, weight=1)
+
     entries = [
         create_label_and_entry(app, parameter, i) for i, parameter in enumerate(PARAMETERS)
     ]
@@ -125,15 +129,37 @@ def create_app():
 
     data_loaded = False
     parameters_loaded = False
-    beta_limit = 0
 
-    beta_limit_label = ttk.Label(app, text=f"Beta Limit: {beta_limit}")
-    beta_limit_label.grid(row=11, column=1, padx=3, pady=10, sticky='w')
 
-    def update_beta_limit(val):
-        nonlocal beta_limit
-        beta_limit = round(float(val), 4)
-        beta_limit_label.config(text=f"Beta Limit: {beta_limit}")
+
+    # 创建一个字典来存储beta_limit的值
+    beta_limit_dict = {"A": 0, "B": 0, "w1": 0, "w2": 0, "p1": 0, "p2": 0}
+
+    # 创建一个函数来打开新的设置窗口
+    def open_limit_window():
+        limit_window = Toplevel(app)
+        limit_window.title("Set Beta Limit")
+
+        # 创建一个函数来更新beta_limit字典的值
+        def update_beta_limit(param, val):
+            beta_limit_dict[param] = round(float(val), 4)
+            # 更新标签显示的文本
+            beta_limit_labels[param].config(text=f"Beta Limit {param}: {beta_limit_dict[param]}")
+
+        # 为每个参数创建一个滑动条和标签
+        beta_limit_labels = {}
+        for i, param in enumerate(["A", "B", "w1", "w2", "p1", "p2"]):
+            beta_limit_labels[param] = Label(limit_window, text=f"Beta Limit {param}: {beta_limit_dict[param]}")
+            beta_limit_labels[param].grid(row=i, column=1, padx=3, pady=10, sticky='w')
+
+            scale = Scale(limit_window, from_=0, to=0.5, resolution=0.0001, orient='horizontal',
+                          command=lambda val, p=param: update_beta_limit(p, val))
+            scale.grid(row=i, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
+            scale.set(0.05)  # 设置初始值为5%
+        # 在主窗口创建一个按钮
+
+    button_set_limit = ttk.Button(app, text="Set Limit", command=open_limit_window)
+    button_set_limit.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
 
     # status_label = ttk.Label(app, text="Status: Data not loaded, Parameters not loaded", font=('Arial', 10))
     # status_label.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
@@ -147,9 +173,17 @@ def create_app():
     parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red", font=('Arial', 10))
     parameters_status_label.pack(side="left", fill="x", expand=True)
 
-    scale = ttk.Scale(app, from_=0, to=0.5, orient='horizontal', command=update_beta_limit)
-    scale.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
-    scale.set(0.05)  # set initial value 5%
+
+    def draw_plot(ax, canvas, x, y, title, label, clear=True, scatter=True):
+        if clear:
+            ax.clear()
+        if scatter:
+            ax.scatter(x, y, label=label)
+        else:
+            ax.plot(x, y, color='red', label=label)
+        ax.set_title(title)
+        ax.legend()
+        canvas.draw()
 
     def load_data():
         nonlocal gen_x, gen_y, T_uniform, data_loaded
@@ -252,7 +286,8 @@ def create_app():
             self.ax.figure.canvas.draw()
 
     def generate():
-        nonlocal cursor, gen_x, gen_y, T_uniform
+        nonlocal cursor, gen_x, gen_y, T_uniform, params
+        gen_x, gen_y, T_uniform, params = None, None, None, None # To fix the bug mentioned 15/6/2023, just set params to None
         try:
             T = safe_eval(entries[0].get())
             A = safe_eval(entries[1].get())
@@ -264,23 +299,31 @@ def create_app():
             n = int(entries[7].get())
 
             x, y = run_gen(T, A, B, w1, w2, p1, p2, n)
-            ax.clear()
-            ax.scatter(x, y, label='Output')
-            ax.set_title('Output')
-            canvas.draw()
+            draw_plot(ax, canvas, x, y, 'Output', 'Output', clear=True, scatter=True)
             gen_x, gen_y = x, y  # store generated values
             T_uniform = np.linspace(0, T, n)
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
             filter_button['state'] = 'normal'
-            params = None          #To avoid conflict with load function -------------IMPORTANT
+            # store generated parameters
+            params = {
+                'T': T,
+                'A': A,
+                'B': B,
+                'w1': w1,
+                'w2': w2,
+                'p1': p1,
+                'p2': p2,
+                'n': n,
+            }
+
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict
         try:
-            fit_results = run_fit(gen_x, gen_y, params, beta_limit)
+            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
@@ -288,18 +331,18 @@ def create_app():
             ax.clear()
 
             if check_var1.get() == 1:
-                ax.scatter(gen_x, gen_y, label='Original data')
+                draw_plot(ax, canvas, gen_x, gen_y, 'Original and Filtered Data', 'Original data', clear=False,
+                          scatter=True)
 
             if check_var2.get() == 1:
-                ax.plot(fit_x2, fit_y2, color='red', label='Filtered data')
+                draw_plot(ax, canvas, fit_x2, fit_y2, 'Original and Filtered Data', 'Filtered data', clear=False,
+                          scatter=False)
 
-            ax.set_title('Original and Filtered Data')
-            ax.legend()
-            canvas.draw()
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
+        print(beta_limit_dict)
 
         # Display the fitted parameters
         for param, value in fit_results.items():
