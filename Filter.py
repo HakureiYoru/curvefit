@@ -12,7 +12,7 @@ logger.addHandler(file_handler)
 
 def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_count=None):
     if x is None or y is None or params is None:
-        logger.info("No load, Find generate")
+        #logger.info("No load, Find generate")
         try:
             with open('output.json', 'r') as f:
                 data_dict = json.load(f)
@@ -27,7 +27,7 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_coun
 
         x, y = np.array(data_dict['Generated Data']).T
     else:
-        logger.info("Loaded data")
+        print("Loaded data")
 
     beta_orig = np.array([params[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]])
     beta_limit = [beta_limit_dict[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]]
@@ -70,11 +70,8 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_coun
     logger.info(f"Parameter limits: {beta_limit_dict}")
     logger.info(f"Output parameters: {output.beta}")
     logger.info(f"Stop reason: {output.stopreason}")
-    # logger.info(f"Info: {output.info}")
-    # logger.info(f"Standard Deviation of Beta: {output.sd_beta}")
-    # logger.info(f"Square root of Diagonal of Covariance: {np.sqrt(np.diag(output.cov_beta))}")
     logger.info(f"Chi: {chi_squared}")
-
+    logger.info("------------")
     return {
         "A": output.beta[0],
         "B": output.beta[1],
@@ -82,4 +79,5 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_coun
         "w2": output.beta[3],
         "p1": output.beta[4],
         "p2": output.beta[5],
+        "chi": chi_squared
     }

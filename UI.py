@@ -364,10 +364,27 @@ def create_app():
             tkinter.messagebox.showerror("Error", str(e))
         print(beta_limit_dict)
 
-        # Display the fitted parameters
+        # Create a new Toplevel window to display the parameters
+        new_window = tk.Toplevel(app)
+
+        # Create a Treeview widget
+        tree = ttk.Treeview(new_window, columns=('Parameters', 'Values'), show='headings')
+        tree.heading('Parameters', text='Parameters', anchor=tk.CENTER)
+        tree.heading('Values', text='Values', anchor=tk.CENTER)
+
+        # Change the column width and alignment
+        tree.column('Parameters', width=100, anchor=tk.CENTER)
+        tree.column('Values', width=500, anchor=tk.CENTER)
+
+        # Insert the parameter limits
+        #tree.insert('', 'end', values=("Parameter limits", str(beta_limit_dict)))
+
+        # Insert the parameter values
         for param, value in fit_results.items():
             if param != "fit_x" and param != "fit_y":
-                print(f"{param}: {value}")
+                tree.insert('', 'end', values=(param, value))
+
+        tree.pack()
 
     buttons_frame = ttk.Frame(app)
     buttons_frame.grid(row=8, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
