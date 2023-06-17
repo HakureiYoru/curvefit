@@ -26,7 +26,4 @@ def run_gen(T, A, B, w1, w2, p1, p2, n):
     with open('parameters.json', 'w') as f:
         json.dump(parameters, f)
 
-    print("x length:", len(x))
-    print("y length:", len(y))
-
     return x, y

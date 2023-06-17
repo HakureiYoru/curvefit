@@ -10,7 +10,7 @@ file_handler = logging.FileHandler('filter_log.txt', 'w')  # Add 'w' mode for ov
 logger.addHandler(file_handler)
 
 
-def run_fit(x=None, y=None, params=None, beta_limit_dict=None):
+def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_count=None):
     if x is None or y is None or params is None:
         logger.info("No load, Find generate")
         try:
@@ -64,6 +64,7 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None):
 
     chi_squared = output.sum_square
     logger.info("------------")
+    logger.info(f'Running run_fit function {filter_press_count} times.')
     logger.info("ODR results:")
     logger.info(f"Input parameters: {params}")
     logger.info(f"Parameter limits: {beta_limit_dict}")

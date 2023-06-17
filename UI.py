@@ -8,6 +8,7 @@ from matplotlib.figure import Figure
 from ttkbootstrap import Style
 from Filter import run_fit
 from Generate import run_gen
+from tkinter import scrolledtext
 import json
 import pandas as pd
 
@@ -124,18 +125,19 @@ def create_app():
     check_button1 = ttk.Checkbutton(app, text="Show Original Data", variable=check_var1, style="TCheckbutton")
     check_button1.grid(row=9, column=0, padx=10, pady=10)
 
-    check_button2 = ttk.Checkbutton(app, text="Show Filtered Data", variable=check_var2, style="TCheckbutton")
+    check_button2 = ttk.Checkbutton(app, text="Show Fitted Data", variable=check_var2, style="TCheckbutton")
     check_button2.grid(row=9, column=1, padx=10, pady=10)
 
     data_loaded = False
     parameters_loaded = False
+    filter_press_count = 0  # initialize counter at global scope
 
 
 
     # 创建一个字典来存储beta_limit的值
-    beta_limit_dict = {"A": 0, "B": 0, "w1": 0, "w2": 0, "p1": 0, "p2": 0}
+    beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
 
-    # 创建一个函数来打开新的设置窗口
+    # Sub-window
     def open_limit_window():
         limit_window = Toplevel(app)
         limit_window.title("Set Beta Limit")
@@ -152,7 +154,7 @@ def create_app():
             beta_limit_labels[param] = Label(limit_window, text=f"Beta Limit {param}: {beta_limit_dict[param]}")
             beta_limit_labels[param].grid(row=i, column=1, padx=3, pady=10, sticky='w')
 
-            scale = Scale(limit_window, from_=0, to=0.5, resolution=0.0001, orient='horizontal',
+            scale = Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
                           command=lambda val, p=param: update_beta_limit(p, val))
             scale.grid(row=i, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
             scale.set(0.05)  # 设置初始值为5%
@@ -160,6 +162,25 @@ def create_app():
 
     button_set_limit = ttk.Button(app, text="Set Limit", command=open_limit_window)
     button_set_limit.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
+
+    def show_logs():
+
+        log_window = tk.Toplevel(app)
+
+        txt = scrolledtext.ScrolledText(log_window, undo=True)
+        txt['font'] = ('consolas', '12')
+        txt.pack(expand=True, fill='both')
+
+        # Load log file
+        with open('filter_log.txt', 'r') as log_file:
+            log_contents = log_file.read()
+
+        # Insert log contents to the text widget
+        txt.insert(tk.INSERT, log_contents)
+
+    # Create a 'Log' button
+    log_button = tk.Button(app, text="Log", command=show_logs)
+    log_button.grid(row=0, column=2, padx=(0, 5), pady=(0, 10), sticky='e')
 
     # status_label = ttk.Label(app, text="Status: Data not loaded, Parameters not loaded", font=('Arial', 10))
     # status_label.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
@@ -321,23 +342,22 @@ def create_app():
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count
+
         try:
-            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict)
+            filter_press_count += 1  # increment counter
+            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, filter_press_count)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
 
             ax.clear()
-
             if check_var1.get() == 1:
-                draw_plot(ax, canvas, gen_x, gen_y, 'Original and Filtered Data', 'Original data', clear=False,
+                draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
                           scatter=True)
-
             if check_var2.get() == 1:
-                draw_plot(ax, canvas, fit_x2, fit_y2, 'Original and Filtered Data', 'Filtered data', clear=False,
+                draw_plot(ax, canvas, fit_x2, fit_y2, 'Original and Fitted Data', 'Filtered data', clear=False,
                           scatter=False)
-
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
@@ -358,7 +378,7 @@ def create_app():
     generate_button.grid(row=0, column=0, padx=10, pady=10, sticky='nsew')
 
     # Here, we use buttons_frame as the parent widget instead of app
-    filter_button = ttk.Button(buttons_frame, text="Filter", command=filter, style="info.TButton", state='disabled')
+    filter_button = ttk.Button(buttons_frame, text="Fit", command=filter, style="info.TButton", state='disabled')
     filter_button.grid(row=0, column=1, padx=10, pady=10, sticky='nsew')
 
     load_data_button = ttk.Button(buttons_frame, text="Load Data", command=load_data, style="info.TButton")
