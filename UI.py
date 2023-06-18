@@ -167,7 +167,7 @@ def create_app():
             scale = tk.Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
                              command=lambda val, p=param: update_beta_limit(p, val))
             scale.grid(row=i, column=1, padx=(0, 5), pady=(0, 10), sticky='e')
-            scale.set(0.05)  # 设置初始值为5%
+            scale.set(beta_limit_dict[param]) # Set the initial value to the last setting
 
 
 

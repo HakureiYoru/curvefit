@@ -12,7 +12,7 @@ logger.addHandler(file_handler)
 
 def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filter_press_count=None):
     if x is None or y is None or params is None:
-        #logger.info("No load, Find generate")
+        # logger.info("No load, Find generate")
         try:
             with open('output.json', 'r') as f:
                 data_dict = json.load(f)
