@@ -134,30 +134,29 @@ def create_app():
 
     ifixb_dict = {param: tk.IntVar() for param in ["A", "B", "w1", "w2", "p1", "p2"]}
     for param in ifixb_dict:
-        ifixb_dict[param].set(1)  # 所有的复选框默认都选中
+        ifixb_dict[param].set(1)  # All checkboxes are checked by default (ifxib all set to 1)
 
 
 
-    # 创建一个字典来存储beta_limit的值
+    # Initial value 0.05
     beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
     # Sub-window
     def open_limit_window():
         limit_window = tk.Toplevel(app)
         limit_window.title("Set Beta Limit and Variability")
 
-        # 创建一个函数来更新beta_limit字典的值
+        # update the value of the beta_limit dictionary
         def update_beta_limit(param, val):
             beta_limit_dict[param] = round(float(val), 4)
-            # 更新标签显示的文本
+            # Update the text displayed on the label
             beta_limit_labels[param].config(text=f"Beta Limit {param}: {beta_limit_dict[param]}")
 
-        # 创建一个字典保存每个参数的复选框状态
+        # Create a dictionary to hold the status of the checkboxes for each parameter
 
 
-        # 为每个参数创建一个滑动条和标签，和一个复选框
         beta_limit_labels = {}
         for i, param in enumerate(["A", "B", "w1", "w2", "p1", "p2"]):
-            # 创建复选框
+            # checkboxes
             tk.Checkbutton(limit_window, text="Variable", variable=ifixb_dict[param]).grid(row=i, column=0, padx=(0, 5),
                                                                                            pady=(0, 10))
 
