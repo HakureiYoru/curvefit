@@ -132,15 +132,18 @@ def create_app():
     parameters_loaded = False
     filter_press_count = 0  # initialize counter at global scope
 
+    ifixb_dict = {param: tk.IntVar() for param in ["A", "B", "w1", "w2", "p1", "p2"]}
+    for param in ifixb_dict:
+        ifixb_dict[param].set(1)  # 所有的复选框默认都选中
+
 
 
     # 创建一个字典来存储beta_limit的值
     beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
-
     # Sub-window
     def open_limit_window():
-        limit_window = Toplevel(app)
-        limit_window.title("Set Beta Limit")
+        limit_window = tk.Toplevel(app)
+        limit_window.title("Set Beta Limit and Variability")
 
         # 创建一个函数来更新beta_limit字典的值
         def update_beta_limit(param, val):
@@ -148,17 +151,25 @@ def create_app():
             # 更新标签显示的文本
             beta_limit_labels[param].config(text=f"Beta Limit {param}: {beta_limit_dict[param]}")
 
-        # 为每个参数创建一个滑动条和标签
+        # 创建一个字典保存每个参数的复选框状态
+
+
+        # 为每个参数创建一个滑动条和标签，和一个复选框
         beta_limit_labels = {}
         for i, param in enumerate(["A", "B", "w1", "w2", "p1", "p2"]):
-            beta_limit_labels[param] = Label(limit_window, text=f"Beta Limit {param}: {beta_limit_dict[param]}")
-            beta_limit_labels[param].grid(row=i, column=1, padx=3, pady=10, sticky='w')
+            # 创建复选框
+            tk.Checkbutton(limit_window, text="Variable", variable=ifixb_dict[param]).grid(row=i, column=0, padx=(0, 5),
+                                                                                           pady=(0, 10))
 
-            scale = Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
-                          command=lambda val, p=param: update_beta_limit(p, val))
-            scale.grid(row=i, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
+            beta_limit_labels[param] = tk.Label(limit_window, text=f"Beta Limit {param}: {beta_limit_dict[param]}")
+            beta_limit_labels[param].grid(row=i, column=2, padx=3, pady=10, sticky='w')
+
+            scale = tk.Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
+                             command=lambda val, p=param: update_beta_limit(p, val))
+            scale.grid(row=i, column=1, padx=(0, 5), pady=(0, 10), sticky='e')
             scale.set(0.05)  # 设置初始值为5%
-        # 在主窗口创建一个按钮
+
+
 
     button_set_limit = ttk.Button(app, text="Set Limit", command=open_limit_window)
     button_set_limit.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
@@ -285,6 +296,9 @@ def create_app():
     gen_x, gen_y = None, None
     T_uniform = None
     params = None
+    new_window = None
+
+
 
     # Create a cursor class to show the x,y position
     class Cursor(object):
@@ -342,11 +356,17 @@ def create_app():
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, ifixb_dict
+        #To avoid too many sub-window exist, just close the previous windows.
+        if new_window is not None:
+            new_window.destroy()
 
         try:
             filter_press_count += 1  # increment counter
-            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, filter_press_count)
+            # Get the values from the checkboxes
+            ifixb = [ifixb_dict[param].get() for param in ["A", "B", "w1", "w2", "p1", "p2"]]
+
+            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, ifixb, filter_press_count)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
             fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
@@ -363,6 +383,7 @@ def create_app():
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
         print(beta_limit_dict)
+        print(ifixb)
 
         # Create a new Toplevel window to display the parameters
         new_window = tk.Toplevel(app)

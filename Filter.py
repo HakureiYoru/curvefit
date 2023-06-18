@@ -10,7 +10,7 @@ file_handler = logging.FileHandler('filter_log.txt', 'w')  # Add 'w' mode for ov
 logger.addHandler(file_handler)
 
 
-def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_count=None):
+def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filter_press_count=None):
     if x is None or y is None or params is None:
         #logger.info("No load, Find generate")
         try:
@@ -51,9 +51,12 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, filter_press_coun
         y1calc = B * np.cos(w2 * t1 + p2)
         return np.where(np.abs(y - y0calc) < np.abs(y - y1calc), y0calc, y1calc)
 
+    # In this example, the uncertainty in the x and y axes is set to 0.01 for all data points.
     T2data = Data(x, y, np.full_like(x, 0.01), np.full_like(y, 0.01))
     T2model = Model(f)
-    myodr = ODR(T2data, T2model, beta0=beta_orig, ifixb=[1, 1, 1, 1, 1, 1])
+    myodr = ODR(T2data, T2model, beta0=beta_orig, ifixb=ifixb)
+    # ifixb This list determines which parameters in the model should be variable and which should be fixed during
+    # the fitting process.
     myodr.set_job(fit_type=0)
     output = myodr.run()
 
