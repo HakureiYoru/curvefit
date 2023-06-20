@@ -11,17 +11,26 @@ logger.addHandler(file_handler)
 
 
 def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filter_press_count=None):
-    required_keys = ["A", "B", "w1", "w2", "p1", "p2"]
-    for key in required_keys:
-        if key not in params:
-            params[key] = 0
+    if x is None or y is None or params is None:
+        # logger.info("No load, Find generate")
+        try:
+            with open('output.json', 'r') as f:
+                data_dict = json.load(f)
+            with open('parameters.json', 'r') as f:
+                params = json.load(f)
+        except FileNotFoundError as fnf_error:
+            logger.error(fnf_error)
+            return
+        except json.JSONDecodeError as json_error:
+            logger.error(json_error)
+            return
 
-    for key in required_keys:
-        if key not in beta_limit_dict:
-            beta_limit_dict[key] = [0, 0]
+        x, y = np.array(data_dict['Generated Data']).T
+    else:
+        print("Loaded data")
 
-    beta_orig = np.array([params[param] for param in required_keys])
-    beta_limit = [beta_limit_dict[param] for param in required_keys]
+    beta_orig = np.array([params[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]])
+    beta_limit = [beta_limit_dict[param] for param in ["A", "B", "w1", "w2", "p1", "p2"]]
 
     def f(beta, x):
         A, B, w1, w2, p1, p2 = beta
@@ -42,9 +51,12 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         y1calc = B * np.cos(w2 * t1 + p2)
         return np.where(np.abs(y - y0calc) < np.abs(y - y1calc), y0calc, y1calc)
 
+    # In this example, the uncertainty in the x and y axes is set to 0.01 for all data points.
     T2data = Data(x, y, np.full_like(x, 0.01), np.full_like(y, 0.01))
     T2model = Model(f)
     myodr = ODR(T2data, T2model, beta0=beta_orig, ifixb=ifixb)
+    # ifixb This list determines which parameters in the model should be variable and which should be fixed during
+    # the fitting process.
     myodr.set_job(fit_type=0)
     output = myodr.run()
 
@@ -72,4 +84,3 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         "p2": output.beta[5],
         "chi": chi_squared
     }
-

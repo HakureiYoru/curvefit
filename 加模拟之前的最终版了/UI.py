@@ -11,9 +11,7 @@ from Generate import run_gen
 from tkinter import scrolledtext
 import json
 import pandas as pd
-#import logging
 
-#logging.basicConfig(filename='error.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 PARAMETERS = [
     {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
@@ -206,24 +204,6 @@ def create_app():
     parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red", font=('Arial', 10))
     parameters_status_label.pack(side="left", fill="x", expand=True)
 
-    # Create a new IntVar for the auto scale checkbox
-    auto_scale_var = tk.IntVar()
-
-    # Create the auto scale checkbox
-    auto_scale_checkbox = ttk.Checkbutton(app, text="Auto Scale", variable=auto_scale_var, style="TCheckbutton")
-    auto_scale_checkbox.grid(row=9, column=2, padx=0, pady=5)  # Adjust the row and column as needed
-
-    def redraw_on_scale_change(*args):
-        # Check if data is loaded
-        if data_loaded:
-            if auto_scale_var.get() == 1:
-                ax.set_aspect('equal', 'box')
-            else:
-                ax.set_aspect('auto')  # Reset to the default aspect
-            draw_plot(ax, canvas, gen_x, gen_y, 'Loaded Data', 'Loaded data', scatter=True)
-
-    # Attach the callback to the Checkbutton
-    auto_scale_var.trace('w', redraw_on_scale_change)
 
     def draw_plot(ax, canvas, x, y, title, label, clear=True, scatter=True):
         if clear:
@@ -234,67 +214,66 @@ def create_app():
             ax.plot(x, y, color='red', label=label)
         ax.set_title(title)
         ax.legend()
-        if auto_scale_var.get() == 1:
-            ax.set_aspect('equal', 'box')
-        else:
-            ax.set_aspect('auto')  # Reset to the default aspect
         canvas.draw()
 
-    def load_file():
-        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded
-        file_path = filedialog.askopenfilename(filetypes=[('Data Files', '*.dat')])
+    def load_data():
+        nonlocal gen_x, gen_y, T_uniform, data_loaded
+        file_path = filedialog.askopenfilename(filetypes=[('Data Files', '*.dat'), ('Data Files', '*.json')])
         if file_path:
-            df = pd.read_csv(file_path, header=None, sep=" ")
-            parameters_data, data = df.iloc[0], df.iloc[1:]
+            if file_path.endswith('.dat'):
+                df = pd.read_csv(file_path, header=None)
+                gen_x, gen_y = df[0].values, df[1].values
 
-            f1, f2, _, _, A1, A2, _, _ = parameters_data.values
-            w1, w2 = f1 * 2, f2 * 2  # w= 2pi*f but here the w has the unit pi
+            elif file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    data_list = data["Generated Data"]
+                    gen_x, gen_y = np.array([item[0] for item in data_list]), np.array([item[1] for item in data_list])
 
-            gen_x, gen_y = data[0].values, data[1].values
-
-            # Calculate the Fourier Transform
-            fourier_transform = np.fft.rfft(gen_y)
-            abs_fourier_transform = np.abs(fourier_transform)
-            power_spectrum = np.square(abs_fourier_transform)
-            frequency = np.fft.rfftfreq(gen_y.size)
-
-            # Find the frequency with the maximum power
-            dominant_frequency = frequency[np.argmax(power_spectrum)]
-
-            # Compute the period as the inverse of the frequency
-            period = int(np.round(1 / dominant_frequency))
-
-            # Only keep one period of data
-            gen_x, gen_y = gen_x[:period], gen_y[:period]
-            #print(gen_x)
-            if auto_scale_var.get() == 1:
-                ax.set_aspect('equal', 'box')
-            else:
-                ax.set_aspect('auto')  # Reset to the default aspect
-            params = {'A': A1, 'B': A2, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
-
-            for i, entry in enumerate(entries):
-                if PARAMETERS[i]['label'] in params:
-                    entry.delete(0, 'end')
-                    entry.insert(0, str(params[PARAMETERS[i]['label']]))
-
-            n = int(entries[7].get())
+            n = len(gen_x)
             T = safe_eval(entries[0].get())
             T_uniform = np.linspace(0, T, n)
+            data_loaded = True
 
+            # New code to plot the data right after loading
             ax.clear()
             ax.scatter(gen_x, gen_y, label='Loaded data')
             ax.set_title('Loaded Data')
             ax.legend()
             canvas.draw()
 
-            parameters_loaded = data_loaded = True
-
             update_status_label()
-
         if data_loaded:
             data_status_label.config(text="Data: Loaded", background="green")
 
+    def load_parameters():
+        nonlocal params
+        file_path = filedialog.askopenfilename(filetypes=[('Parameter Files', '*.json'), ('Parameter Files', '*.dat')])
+        if file_path:
+            if file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
+                    parameters = json.load(f)
+                    params = parameters
+                    for i, entry in enumerate(entries):
+                        entry.delete(0, 'end')
+                        entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
+
+            elif file_path.endswith('.dat'):
+                df = pd.read_csv(file_path, header=None)
+                parameters = df.to_dict(orient='records')[0]
+                params = parameters
+                for i, entry in enumerate(entries):
+                    entry.delete(0, 'end')
+                    entry.insert(0, str(parameters[PARAMETERS[i]['label']]))
+
+            nonlocal T_uniform
+            n = int(entries[7].get())
+            T = safe_eval(entries[0].get())
+            T_uniform = np.linspace(0, T, n)
+
+        nonlocal parameters_loaded
+        parameters_loaded = True
+        update_status_label()
         if parameters_loaded:
             parameters_status_label.config(text="Parameters: Loaded", background="green")
 
@@ -356,7 +335,7 @@ def create_app():
             x, y = run_gen(T, A, B, w1, w2, p1, p2, n)
             draw_plot(ax, canvas, x, y, 'Output', 'Output', clear=True, scatter=True)
             gen_x, gen_y = x, y  # store generated values
-            T_uniform = np.linspace(0, T, 10000)
+            T_uniform = np.linspace(0, T, n)
             cursor = Cursor(ax)
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
             filter_button['state'] = 'normal'
@@ -386,16 +365,6 @@ def create_app():
             # Get the values from the checkboxes
             ifixb = [ifixb_dict[param].get() for param in ["A", "B", "w1", "w2", "p1", "p2"]]
 
-            params = {
-                'T': safe_eval(entries[0].get()),
-                'A': safe_eval(entries[1].get()),
-                'B': safe_eval(entries[2].get()),
-                'w1': safe_eval(entries[3].get()),
-                'w2': safe_eval(entries[4].get()),
-                'p1': safe_eval(entries[5].get()),
-                'p2': safe_eval(entries[6].get()),
-                'n': int(entries[7].get()),
-            }
             fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, ifixb, filter_press_count)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
@@ -412,7 +381,6 @@ def create_app():
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
-            #logging.error("Exception occurred", exc_info=True)
         print(beta_limit_dict)
         print(ifixb)
 
@@ -432,9 +400,9 @@ def create_app():
         #tree.insert('', 'end', values=("Parameter limits", str(beta_limit_dict)))
 
         # Insert the parameter values
-        for param in ['A', 'B', 'w1', 'w2']:
-            if param in fit_results:
-                tree.insert('', 'end', values=(param, fit_results[param]))
+        for param, value in fit_results.items():
+            if param != "fit_x" and param != "fit_y":
+                tree.insert('', 'end', values=(param, value))
 
         tree.pack()
 
@@ -450,8 +418,12 @@ def create_app():
     filter_button = ttk.Button(buttons_frame, text="Fit", command=filter, style="info.TButton", state='disabled')
     filter_button.grid(row=0, column=1, padx=10, pady=10, sticky='nsew')
 
-    load_button = ttk.Button(buttons_frame, text="Load Data & Parameters", command=load_file, style="info.TButton")
-    load_button.grid(row=0, column=2, padx=10, pady=10, sticky='nsew')
+    load_data_button = ttk.Button(buttons_frame, text="Load Data", command=load_data, style="info.TButton")
+    load_data_button.grid(row=0, column=2, padx=10, pady=10, sticky='nsew')
+
+    load_parameters_button = ttk.Button(buttons_frame, text="Load Parameters", command=load_parameters,
+                                        style="info.TButton")
+    load_parameters_button.grid(row=0, column=3, padx=10, pady=10, sticky='nsew')
 
     app.mainloop()
 
