@@ -178,12 +178,10 @@ def create_app():
     def show_logs():
 
         log_window = tk.Toplevel(app)
-        log_window.title("History logs")
 
         txt = scrolledtext.ScrolledText(log_window, undo=True)
         txt['font'] = ('consolas', '12')
         txt.pack(expand=True, fill='both')
-
 
         # Load log file
         with open('filter_log.txt', 'r') as log_file:
@@ -208,24 +206,6 @@ def create_app():
     parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red", font=('Arial', 10))
     parameters_status_label.pack(side="left", fill="x", expand=True)
 
-    # Create a new IntVar for the auto scale checkbox
-    auto_scale_var = tk.IntVar()
-
-    # Create the auto scale checkbox
-    auto_scale_checkbox = ttk.Checkbutton(app, text="Auto Scale", variable=auto_scale_var, style="TCheckbutton")
-    auto_scale_checkbox.grid(row=9, column=2, padx=0, pady=5)  # Adjust the row and column as needed
-
-    def redraw_on_scale_change(*args):
-        # Check if data is loaded
-        if data_loaded:
-            if auto_scale_var.get() == 1:
-                ax.set_aspect('equal', 'box')
-            else:
-                ax.set_aspect('auto')  # Reset to the default aspect
-            draw_plot(ax, canvas, gen_x, gen_y, 'Loaded Data', 'Loaded data', scatter=True)
-
-    # Attach the callback to the Checkbutton
-    auto_scale_var.trace('w', redraw_on_scale_change)
 
     def draw_plot(ax, canvas, x, y, title, label, clear=True, scatter=True):
         if clear:
@@ -236,10 +216,6 @@ def create_app():
             ax.plot(x, y, color='red', label=label)
         ax.set_title(title)
         ax.legend()
-        if auto_scale_var.get() == 1:
-            ax.set_aspect('equal', 'box')
-        else:
-            ax.set_aspect('auto')  # Reset to the default aspect
         canvas.draw()
 
     def load_file():
@@ -269,10 +245,7 @@ def create_app():
             # Only keep one period of data
             gen_x, gen_y = gen_x[:period], gen_y[:period]
             #print(gen_x)
-            if auto_scale_var.get() == 1:
-                ax.set_aspect('equal', 'box')
-            else:
-                ax.set_aspect('auto')  # Reset to the default aspect
+
             params = {'A': A1, 'B': A2, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
 
             for i, entry in enumerate(entries):
@@ -420,7 +393,6 @@ def create_app():
 
         # Create a new Toplevel window to display the parameters
         new_window = tk.Toplevel(app)
-        new_window.title = ("Fit Result")
 
         # Create a Treeview widget
         tree = ttk.Treeview(new_window, columns=('Parameters', 'Values'), show='headings')
@@ -435,7 +407,7 @@ def create_app():
         #tree.insert('', 'end', values=("Parameter limits", str(beta_limit_dict)))
 
         # Insert the parameter values
-        for param in ['A', 'B', 'w1', 'w2', 'p1', 'p2', 'chi']:
+        for param in ['A', 'B', 'w1', 'w2']:
             if param in fit_results:
                 tree.insert('', 'end', values=(param, fit_results[param]))
 

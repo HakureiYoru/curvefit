@@ -10,6 +10,27 @@ file_handler = logging.FileHandler('filter_log.txt', 'w')  # Add 'w' mode for ov
 logger.addHandler(file_handler)
 
 
+def calculate_t_result(beta, x, y):
+    A, B, w1, w2, p1, p2 = beta
+    t_result = [0]
+    for i in range(1, len(x)):
+        x_prev, x_cur = x[i - 1], x[i]
+        y_cur = y[i]
+
+        t_prev = t_result[-1]
+        t0 = ((0 * np.pi + np.arccos(np.clip(x_cur / A, -1, 1))) - p1) / w1 + t_prev
+        t1 = ((1 * np.pi + np.arccos(np.clip(x_cur / A, -1, 1))) - p1) / w1 + t_prev
+
+        y0calc = B * np.cos(w2 * t0 + p2)
+        y1calc = B * np.cos(w2 * t1 + p2)
+
+        t_cur = t0 if abs(y_cur - y0calc) < abs(y_cur - y1calc) else t1
+
+        t_result.append(t_cur)
+
+    return t_result
+
+
 def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filter_press_count=None):
     required_keys = ["A", "B", "w1", "w2", "p1", "p2"]
     for key in required_keys:
@@ -54,6 +75,16 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         i += 1
 
     chi_squared = output.sum_square
+
+    E = f(output.beta, x)
+    O = y
+    chi_squared_per_point = (O - E) ** 2 / (E + 1e-6)
+
+    t_result = calculate_t_result(output.beta, x, y)
+
+    with open('t_result.json', 'w') as json_file:
+        json.dump(t_result, json_file)
+
     logger.info("------------")
     logger.info(f'Running run_fit function {filter_press_count} times.')
     logger.info("ODR results:")
@@ -62,7 +93,11 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
     logger.info(f"Output parameters: {output.beta}")
     logger.info(f"Stop reason: {output.stopreason}")
     logger.info(f"Chi: {chi_squared}")
+    logger.info(f"Chi per point: {chi_squared_per_point}")
     logger.info("------------")
+
+
+
     return {
         "A": output.beta[0],
         "B": output.beta[1],
@@ -70,6 +105,6 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         "w2": output.beta[3],
         "p1": output.beta[4],
         "p2": output.beta[5],
-        "chi": chi_squared
+        "chi": chi_squared,
+        "chi_per_point": chi_squared_per_point.tolist()
     }
-
