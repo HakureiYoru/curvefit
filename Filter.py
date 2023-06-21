@@ -106,5 +106,6 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         "p1": output.beta[4],
         "p2": output.beta[5],
         "chi": chi_squared,
-        "chi_per_point": chi_squared_per_point.tolist()
+        "chi_per_point": chi_squared_per_point.tolist(),
+        "fitted time": t_result
     }

@@ -243,8 +243,8 @@ def create_app():
         canvas.draw()
 
     def load_file():
-        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded
-        file_path = filedialog.askopenfilename(filetypes=[('Data Files', '*.dat')])
+        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded, t_measured
+        file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
         if file_path:
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
@@ -252,7 +252,7 @@ def create_app():
             f1, f2, _, _, A1, A2, _, _ = parameters_data.values
             w1, w2 = f1 * 2, f2 * 2  # w= 2pi*f but here the w has the unit pi
 
-            gen_x, gen_y = data[0].values, data[1].values
+            gen_x, gen_y, t_measured = data[0].values, data[1].values, data[2].values
 
             # Calculate the Fourier Transform
             fourier_transform = np.fft.rfft(gen_y)
@@ -267,7 +267,7 @@ def create_app():
             period = int(np.round(1 / dominant_frequency))
 
             # Only keep one period of data
-            gen_x, gen_y = gen_x[:period], gen_y[:period]
+            gen_x, gen_y, t_measured = gen_x[:period], gen_y[:period], t_measured[:period]
             #print(gen_x)
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
@@ -315,7 +315,7 @@ def create_app():
 
     # Initialize
     cursor = None
-    gen_x, gen_y = None, None
+    gen_x, gen_y, t_measured= None, None, None
     T_uniform = None
     params = None
     new_window = None
@@ -378,7 +378,7 @@ def create_app():
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, ifixb_dict
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, ifixb_dict, t_measured
         #To avoid too many sub-window exist, just close the previous windows.
         if new_window is not None:
             new_window.destroy()
@@ -440,6 +440,36 @@ def create_app():
                 tree.insert('', 'end', values=(param, fit_results[param]))
 
         tree.pack()
+
+        # Extract the fitted times
+        t_fitted = np.array(fit_results["fitted time"])
+
+        # Calculate the difference between the fitted and measured times
+        time_differences = t_fitted - t_measured
+
+        # Create a new window for the time comparison plot
+        time_comparison_window = tk.Toplevel(app)
+        time_comparison_window.title = ("Time Comparison")
+        time_comparison_canvas = FigureCanvasTkAgg(Figure(figsize=(5, 10)), master=time_comparison_window)
+        time_comparison_canvas.draw()
+        time_comparison_canvas.get_tk_widget().pack()
+        time_comparison_figure = time_comparison_canvas.figure
+
+        # Plot the measured times and fitted times in a subplot
+        time_comparison_ax1 = time_comparison_figure.add_subplot(211)
+        time_comparison_ax1.plot(t_measured, label="Measured Times", marker='o')
+        time_comparison_ax1.plot(t_fitted, label="Fitted Times", marker='x')
+        time_comparison_ax1.set_xlabel("Data Point Index")
+        time_comparison_ax1.set_ylabel("Time")
+        time_comparison_ax1.legend()
+
+        # Plot the time differences in another subplot
+        time_comparison_ax2 = time_comparison_figure.add_subplot(212)
+        time_comparison_ax2.scatter(range(len(time_differences)), time_differences, marker='o')
+        time_comparison_ax2.set_xlabel("Data Point Index")
+        time_comparison_ax2.set_ylabel("Time Difference")
+
+        time_comparison_figure.subplots_adjust(hspace=0.5)# Adjust the spacing between the subplots
 
     buttons_frame = ttk.Frame(app)
     buttons_frame.grid(row=8, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
