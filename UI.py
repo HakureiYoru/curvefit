@@ -19,8 +19,8 @@ PARAMETERS = [
     {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
     {"label": "A", "preset": '1', "tooltip": 'Input range: Any positive number'},
     {"label": "B", "preset": '1', "tooltip": 'Input range: Any positive number'},
-    {"label": "w1", "preset": '1', "tooltip": 'Input range: Any positive number'},
-    {"label": "w2", "preset": '1', "tooltip": 'Input range: Any positive number'},
+    {"label": "f1", "preset": '1', "tooltip": 'Input range: Frequency, to get w= 2*pi*f'},
+    {"label": "f2", "preset": '1', "tooltip": 'Input range: Frequency, to get w= 2*pi*f'},
     {"label": "p1", "preset": '0', "tooltip": 'Input range: x*pi or pi/x'},
     {"label": "p2", "preset": 'pi', "tooltip": 'Input range: x*pi or pi/x'},
     {"label": "n", "preset": '100', "tooltip": 'Input range: Better Larger than 0'}
@@ -274,11 +274,12 @@ def create_app():
             else:
                 ax.set_aspect('auto')  # Reset to the default aspect
             params = {'A': A1, 'B': A2, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
+            params_in = {'A': A1, 'B': A2, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
 
             for i, entry in enumerate(entries):
-                if PARAMETERS[i]['label'] in params:
+                if PARAMETERS[i]['label'] in params_in:
                     entry.delete(0, 'end')
-                    entry.insert(0, str(params[PARAMETERS[i]['label']]))
+                    entry.insert(0, str(params_in[PARAMETERS[i]['label']]))
 
             n = int(entries[7].get())
             T = safe_eval(entries[0].get())
@@ -349,8 +350,8 @@ def create_app():
             T = safe_eval(entries[0].get())
             A = safe_eval(entries[1].get())
             B = safe_eval(entries[2].get())
-            w1 = safe_eval(entries[3].get())
-            w2 = safe_eval(entries[4].get())
+            w1 = safe_eval(entries[3].get()) * 2 * np.pi # w= 2*pi*f
+            w2 = safe_eval(entries[4].get()) * 2 * np.pi
             p1 = safe_eval(entries[5].get())
             p2 = safe_eval(entries[6].get())
             n = int(entries[7].get())
@@ -392,31 +393,32 @@ def create_app():
                 'T': safe_eval(entries[0].get()),
                 'A': safe_eval(entries[1].get()),
                 'B': safe_eval(entries[2].get()),
-                'w1': safe_eval(entries[3].get()),
-                'w2': safe_eval(entries[4].get()),
+                'w1': safe_eval(entries[3].get()) * 2 * np.pi, # w = 2*pi*f
+                'w2': safe_eval(entries[4].get()) * 2 * np.pi,
                 'p1': safe_eval(entries[5].get()),
                 'p2': safe_eval(entries[6].get()),
                 'n': int(entries[7].get()),
             }
             fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, ifixb, filter_press_count)
 
-            fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * np.pi * T_uniform + fit_results["p1"])
-            fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * np.pi * T_uniform + fit_results["p2"])
+            fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * T_uniform + fit_results["p1"])
+            fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * T_uniform + fit_results["p2"])
 
             ax.clear()
             if check_var1.get() == 1:
                 draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
                           scatter=True)
             if check_var2.get() == 1:
-                draw_plot(ax, canvas, fit_x2, fit_y2, 'Original and Fitted Data', 'Filtered data', clear=False,
+                draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False,
                           scatter=False)
             cursor = Cursor(ax)
+
             canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
         except Exception as e:
             tkinter.messagebox.showerror("Error", str(e))
             #logging.error("Exception occurred", exc_info=True)
-        print(beta_limit_dict)
-        print(ifixb)
+        #print(beta_limit_dict)
+        #print(ifixb)
 
         # Create a new Toplevel window to display the parameters
         new_window = tk.Toplevel(app)
@@ -443,11 +445,9 @@ def create_app():
 
         # Extract the fitted times
         t_fitted = np.array(fit_results["fitted time"])
-
-        # Calculate the difference between the fitted and measured times
         time_differences = t_fitted - t_measured
 
-        # Create a new window for the time comparison plot
+
         time_comparison_window = tk.Toplevel(app)
         time_comparison_window.title = ("Time Comparison")
         time_comparison_canvas = FigureCanvasTkAgg(Figure(figsize=(5, 10)), master=time_comparison_window)
