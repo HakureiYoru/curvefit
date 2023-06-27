@@ -11,18 +11,24 @@ non_accumulated_result = data.get('non_accumulated_result', [])
 accumulated_result = data.get('accumulated_result', [])
 
 # 创建新图形
-plt.figure()
+fig, axs = plt.subplots(2, 1, figsize=(10, 8))
 
-# 绘制非累加结果
-plt.scatter(range(len(non_accumulated_result)), non_accumulated_result, label="Non Accumulated Result")
+# 在第一个子图中绘制非累加结果
+axs[0].scatter(range(len(non_accumulated_result)), non_accumulated_result, label="Non Accumulated Result")
+axs[0].set_title('Non Accumulated Result')
+axs[0].set_xlabel('Index')
+axs[0].set_ylabel('Time')
+axs[0].legend()
 
-# 添加图例
-plt.legend()
+# 在第二个子图中绘制累加结果
+axs[1].plot(accumulated_result, label="Accumulated Result", marker='x')
+axs[1].set_title('Accumulated Result')
+axs[1].set_xlabel('Index')
+axs[1].set_ylabel('Time')
+axs[1].legend()
 
-# 添加标题和轴标签
-plt.title('Results from t_result.json')
-plt.xlabel('Index')
-plt.ylabel('Time')
+# 调整子图的间距
+plt.tight_layout()
 
 # 显示图形
 plt.show()

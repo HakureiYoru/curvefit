@@ -11,6 +11,8 @@ from Generate import run_gen
 from tkinter import scrolledtext
 import json
 import pandas as pd
+import matplotlib.pyplot as plt
+from fitxy import fit_gen_x_and_gen_y
 #import logging
 
 #logging.basicConfig(filename='error.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -249,10 +251,12 @@ def create_app():
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
-            f1, f2, _, _, A1, A2, _, _ = parameters_data.values
+            f1, f2, _, _, _, _, _, _ = parameters_data.values
             w1, w2 = f1 * 2, f2 * 2  # w= 2pi*f but here the w has the unit pi
 
             gen_x, gen_y, t_measured = data[0].values, data[1].values, data[2].values
+
+
 
             # Calculate the Fourier Transform
             fourier_transform = np.fft.rfft(gen_y)
@@ -268,13 +272,45 @@ def create_app():
 
             # Only keep one period of data
             gen_x, gen_y, t_measured = gen_x[:period], gen_y[:period], t_measured[:period]
+
+            max_x = np.max(gen_x)
+            min_x = np.min(gen_x)
+            A = (max_x - min_x) / 2
+
+            max_y = np.max(gen_y)
+            min_y = np.min(gen_y)
+            B = (max_y - min_y) / 2
+
+            # 查找gen_x和gen_y的峰值位置
+            peak_index_x = np.argmax(gen_x)
+            peak_index_y = np.argmax(gen_y)
+
+            # 输出峰值的位置
+            print(f"Peak position in gen_x: {peak_index_x}")
+            print(f"Peak position in gen_y: {peak_index_y}")
+
+            index_difference = peak_index_y - peak_index_x
+
+            phase_difference = (2 * np.pi * index_difference / len(gen_x))
+
+            # 如果相位差为负，将其转换为正值
+            if phase_difference < 0:
+                phase_difference += 2 * np.pi
+
+            if phase_difference > np.pi:
+                phase_difference = 2 * np.pi - phase_difference
+
+            # Output phase difference in π format
+            phase_difference_in_pi = round(phase_difference / np.pi, 2)
+            print(f"Phase difference: {phase_difference_in_pi}π radians")
+
             #print(gen_x)
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
             else:
                 ax.set_aspect('auto')  # Reset to the default aspect
-            params = {'A': A1, 'B': A2, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
-            params_in = {'A': A1, 'B': A2, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': 0, 'n': len(gen_x)}
+            params = {'A': A, 'B': B, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference, 'n': len(gen_x)}
+            params_in = {'A': A, 'B': B, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': phase_difference, 'n': len(gen_x)}
 
             for i, entry in enumerate(entries):
                 if PARAMETERS[i]['label'] in params_in:
@@ -294,6 +330,37 @@ def create_app():
             parameters_loaded = data_loaded = True
 
             update_status_label()
+
+            # Create a new Tkinter window
+            new_window = tk.Toplevel()
+            new_window.title("Data Plots")
+
+            # Create a new matplotlib figure and add subplots
+            new_fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+
+            # Plot gen_x in the first subplot
+            axs[0].plot(gen_x, label='gen_x')
+            axs[0].set_title('gen_x')
+            axs[0].set_xlabel('Index')
+            axs[0].set_ylabel('Value')
+            axs[0].legend()
+
+            # Plot gen_y in the second subplot
+            axs[1].plot(gen_y, label='gen_y')
+            axs[1].set_title('gen_y')
+            axs[1].set_xlabel('Index')
+            axs[1].set_ylabel('Value')
+            axs[1].legend()
+
+            new_fig.subplots_adjust(hspace=0.5)
+
+            # Embed the matplotlib figure in the Tkinter window
+            new_canvas = FigureCanvasTkAgg(new_fig, master=new_window)  # Rename this to new_canvas
+            new_canvas.draw()
+            new_canvas.get_tk_widget().pack()
+
+            # Update the main window
+            new_window.update()
 
         if data_loaded:
             data_status_label.config(text="Data: Loaded", background="green")

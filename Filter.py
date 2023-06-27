@@ -13,20 +13,30 @@ logger.addHandler(file_handler)
 def calculate_best_times(A, B, w1, w2, p1, p2, x, y):
     # Find the 2 possible times which could be responsible for the x value.
     tx0 = ((0 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
+    print("tx0:", tx0[0])
     tx1 = ((1 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
+    print("tx1:", tx1[0])
 
     # Find the 2 possible times which could be responsible for the y value.
     ty0 = ((0 * np.pi + np.arccos(np.clip(y / B, -1, 1))) - p2) / w2
+    print("ty0:", ty0[0])
+
     ty1 = ((1 * np.pi + np.arccos(np.clip(y / B, -1, 1))) - p2) / w2
+    print("ty1:", ty1[0])
 
     # Work out all magnitudes of the differences of the pairs of x and y times
     d00 = np.abs(tx0 - ty0)
+    print("d00:", d00[0])
     d01 = np.abs(tx0 - ty1)
+    print("d01:", d01[0])
     d10 = np.abs(tx1 - ty0)
+    print("d10:", d10[0])
     d11 = np.abs(tx1 - ty1)
+    print("d11:", d11[0])
 
     # Default to tx0 until we know better
     t_result = np.copy(tx0)
+    print("t_result:", t_result[0])
 
     # If we know that tx0 is the best time, then we can use that as the result
     np.putmask(t_result, ((d10 < d00) & (d10 < d01)) | ((d11 < d00) & (d11 < d01)), tx1)
