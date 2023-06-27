@@ -12,7 +12,8 @@ from tkinter import scrolledtext
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
-from fitxy import fit_gen_x_and_gen_y
+import function_analysis
+
 #import logging
 
 #logging.basicConfig(filename='error.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -244,73 +245,77 @@ def create_app():
             ax.set_aspect('auto')  # Reset to the default aspect
         canvas.draw()
 
+
+    previous_window = None
+
+
+
     def load_file():
-        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded, t_measured
+        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded, t_measured, previous_window
         file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
         if file_path:
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
             f1, f2, _, _, _, _, _, _ = parameters_data.values
-            w1, w2 = f1 * 2, f2 * 2  # w= 2pi*f but here the w has the unit pi
+            w1, w2 = f1 * 2 * np.pi, f2 * 2 * np.pi  # w = 2πf
 
             gen_x, gen_y, t_measured = data[0].values, data[1].values, data[2].values
 
-
-
-            # Calculate the Fourier Transform
-            fourier_transform = np.fft.rfft(gen_y)
-            abs_fourier_transform = np.abs(fourier_transform)
-            power_spectrum = np.square(abs_fourier_transform)
-            frequency = np.fft.rfftfreq(gen_y.size)
-
-            # Find the frequency with the maximum power
-            dominant_frequency = frequency[np.argmax(power_spectrum)]
-
-            # Compute the period as the inverse of the frequency
-            period = int(np.round(1 / dominant_frequency))
+            if previous_window is not None:
+                previous_window.destroy()
 
             # Only keep one period of data
-            gen_x, gen_y, t_measured = gen_x[:period], gen_y[:period], t_measured[:period]
+            gen_x, gen_y, t_measured = function_analysis.keep_one_period(gen_x, gen_y, t_measured)
+            #This part is prepared for the more complex x,y data
+            #by performing an FFT on them and obtaining the frequency, amplitude
+            analysis_result = function_analysis.analyze_function(gen_x, gen_y)
 
-            max_x = np.max(gen_x)
-            min_x = np.min(gen_x)
-            A = (max_x - min_x) / 2
+            for key in analysis_result.keys():
+                print(f"\nResults for {key}:")
 
-            max_y = np.max(gen_y)
-            min_y = np.min(gen_y)
-            B = (max_y - min_y) / 2
+                # If the result list is empty
+                if not analysis_result[key]:
+                    print("No significant frequency components found.")
 
-            # 查找gen_x和gen_y的峰值位置
-            peak_index_x = np.argmax(gen_x)
-            peak_index_y = np.argmax(gen_y)
+                # Print details for each frequency
+                for i, component in enumerate(analysis_result[key], 1):
+                    frequency = component["Frequency"]
+                    amplitude = component["Amplitude"]
+                    phase = component["Phase"]
 
-            # 输出峰值的位置
-            print(f"Peak position in gen_x: {peak_index_x}")
-            print(f"Peak position in gen_y: {peak_index_y}")
+                    print(f"Component {i}:")
+                    print(f"\tFrequency: {frequency:.2f}")
+                    print(f"\tAmplitude: {amplitude:.2f}")
+                    print(f"\tPhase: {phase:.2f} rad")
 
-            index_difference = peak_index_y - peak_index_x
+            # Process the data to find A, B, and phase difference
+            processed_data = function_analysis.process_data(gen_x, gen_y)
 
-            phase_difference = (2 * np.pi * index_difference / len(gen_x))
+            # Find A and B and phase difference
+            A = processed_data["A"]
+            B = processed_data["B"]
+            phase_difference_in_pi = processed_data["Phase difference"]
 
-            # 如果相位差为负，将其转换为正值
-            if phase_difference < 0:
-                phase_difference += 2 * np.pi
+            # Adjusting the frequency according to the number of points in a cycle
+            base_points = 500
+            adjustment_factor = base_points / len(gen_x)
 
-            if phase_difference > np.pi:
-                phase_difference = 2 * np.pi - phase_difference
+            # Adjust the frequency because we only use one period of data
+            f1 = f1 / adjustment_factor
+            f2 = f2 / adjustment_factor
 
-            # Output phase difference in π format
-            phase_difference_in_pi = round(phase_difference / np.pi, 2)
             print(f"Phase difference: {phase_difference_in_pi}π radians")
 
-            #print(gen_x)
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
             else:
                 ax.set_aspect('auto')  # Reset to the default aspect
-            params = {'A': A, 'B': B, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference, 'n': len(gen_x)}
-            params_in = {'A': A, 'B': B, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': phase_difference, 'n': len(gen_x)}
+
+            params = {'A': A, 'B': B, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi,
+                      'n': len(gen_x)}
+
+            params_in = {'A': A, 'B': B, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi, 'n': len(gen_x)}
 
             for i, entry in enumerate(entries):
                 if PARAMETERS[i]['label'] in params_in:
@@ -355,9 +360,11 @@ def create_app():
             new_fig.subplots_adjust(hspace=0.5)
 
             # Embed the matplotlib figure in the Tkinter window
-            new_canvas = FigureCanvasTkAgg(new_fig, master=new_window)  # Rename this to new_canvas
+            new_canvas = FigureCanvasTkAgg(new_fig, master=new_window)
             new_canvas.draw()
             new_canvas.get_tk_widget().pack()
+
+            previous_window = new_window
 
             # Update the main window
             new_window.update()
@@ -387,6 +394,7 @@ def create_app():
     T_uniform = None
     params = None
     new_window = None
+    time_comparison_window = None
 
 
 
@@ -446,10 +454,12 @@ def create_app():
             tkinter.messagebox.showerror("Error", str(e))
 
     def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, ifixb_dict, t_measured
+        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, time_comparison_window, ifixb_dict, t_measured
         #To avoid too many sub-window exist, just close the previous windows.
         if new_window is not None:
             new_window.destroy()
+        if 'time_comparison_window' in locals() and time_comparison_window is not None:
+            time_comparison_window.destroy()
 
         try:
             filter_press_count += 1  # increment counter
