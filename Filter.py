@@ -37,6 +37,7 @@ def calculate_best_times(A, B, w1, w2, p1, p2, x, y):
     # Default to tx0 until we know better
     t_result = np.copy(tx0)
     print("t_result:", t_result[0])
+    print("----------------------")
 
     # If we know that tx0 is the best time, then we can use that as the result
     np.putmask(t_result, ((d10 < d00) & (d10 < d01)) | ((d11 < d00) & (d11 < d01)), tx1)
@@ -144,3 +145,4 @@ def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filte
         "x_fitp": output.xplus,
         "y_fitp": output.y
     }
+

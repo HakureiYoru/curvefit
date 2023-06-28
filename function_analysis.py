@@ -14,41 +14,34 @@ def analyze_function(gen_x, gen_y):
     angle_ft_gen_y = np.angle(ft_gen_y)
     freq_gen_y = np.fft.rfftfreq(len(gen_y))
 
-    analysis_result = {
-        "gen_x": [],
-        "gen_y": []
+    results = {
+        "gen_x_amplitudes": [],
+        "gen_x_phases": [],
+        "gen_y_amplitudes": [],
+        "gen_y_phases": []
     }
 
     # Find the dominant frequency of gen_x
     for i in range(len(freq_gen_x)):
         if abs_ft_gen_x[i] > 0.2:  # set the boundary of important frequency components
-            analysis_result["gen_x"].append({
-                "Frequency": len(gen_x) / (1 / freq_gen_x[i]),
-                "Amplitude": abs_ft_gen_x[i],
-                "Phase": angle_ft_gen_x[i]
-            })
+            amplitude = abs_ft_gen_x[i]
+            phase = angle_ft_gen_x[i]
+            results["gen_x_amplitudes"].append(amplitude)
+            results["gen_x_phases"].append(phase)
 
     # Find the dominant frequency of gen_y
     for i in range(len(freq_gen_y)):
         if abs_ft_gen_y[i] > 0.2:  # set the boundary of important frequency components
-            analysis_result["gen_y"].append({
-                "Frequency": len(gen_y) / (1 / freq_gen_y[i]),
-                "Amplitude": abs_ft_gen_y[i],
-                "Phase": angle_ft_gen_y[i]
-            })
+            amplitude = abs_ft_gen_y[i]
+            phase = angle_ft_gen_y[i]
+            results["gen_y_amplitudes"].append(amplitude)
+            results["gen_y_phases"].append(phase)
 
-    return analysis_result
+    return results
 
 
-def process_data(gen_x, gen_y):
-    # Find A and B
-    max_x = np.max(gen_x)
-    min_x = np.min(gen_x)
-    A = (max_x - min_x) / 2
 
-    max_y = np.max(gen_y)
-    min_y = np.min(gen_y)
-    B = (max_y - min_y) / 2
+def process_data(gen_x, gen_y, f1, f2):
 
     # Find phase difference
     peak_index_x = np.argmax(gen_x)
@@ -67,7 +60,15 @@ def process_data(gen_x, gen_y):
     # Output phase difference in π format
     phase_difference_in_pi = round(phase_difference / np.pi, 2)
 
-    return {"A": A, "B": B, "Phase difference": phase_difference_in_pi}
+    # Adjusting the frequency according to the number of points in a cycle
+    base_points = 500
+    adjustment_factor = base_points / len(gen_x)
+
+    # Adjust the frequency because we only use one period of data
+    f1 = f1 / adjustment_factor
+    f2 = f2 / adjustment_factor
+
+    return {"Phase difference": phase_difference_in_pi, "f1": f1, "f2": f2}
 
 
 def keep_one_period(gen_x, gen_y, t_measured):
@@ -76,23 +77,8 @@ def keep_one_period(gen_x, gen_y, t_measured):
     abs_fourier_transform = np.abs(fourier_transform)
     power_spectrum = np.square(abs_fourier_transform)
     frequency = np.fft.rfftfreq(gen_y.size)
-
-    # Find the frequency with the maximum power
     dominant_frequency = frequency[np.argmax(power_spectrum)]
-
-    # Compute the period as the inverse of the frequency
     period = int(np.round(1 / dominant_frequency))
-
-    # calculate number of periods and points in a period
-    num_periods = int(np.round(len(gen_y) * dominant_frequency))
-
-    points_per_period = int(np.round(len(gen_y) / num_periods))
-
-    # print the total point read, number of periods, number of points per period
-    print("-------------------")
-    print("Total point read: ", len(gen_y))
-    print("Number of periods: ", num_periods)
-    print("Number of points per period: ", points_per_period)
 
     # Only keep one period of data
     return gen_x[:period], gen_y[:period], t_measured[:period]

@@ -269,41 +269,26 @@ def create_app():
             gen_x, gen_y, t_measured = function_analysis.keep_one_period(gen_x, gen_y, t_measured)
             #This part is prepared for the more complex x,y data
             #by performing an FFT on them and obtaining the frequency, amplitude
-            analysis_result = function_analysis.analyze_function(gen_x, gen_y)
+            analysis_results = function_analysis.analyze_function(gen_x, gen_y)
 
-            for key in analysis_result.keys():
-                print(f"\nResults for {key}:")
+            # Assign the returned result to a variable
+            A_x = analysis_results["gen_x_amplitudes"]
+            p_x = analysis_results["gen_x_phases"]
+            B_y = analysis_results["gen_y_amplitudes"]
+            p_y = analysis_results["gen_y_phases"]
+            print("--------------")
+            print(f"gen_x_amplitudes: {A_x}")
+            print(f"gen_x_phases: {p_x}")
+            print(f"gen_y_amplitudes: {B_y}")
+            print(f"gen_y_phases: {p_y}")
+            print("--------------")
 
-                # If the result list is empty
-                if not analysis_result[key]:
-                    print("No significant frequency components found.")
+            # Process the data to find phase difference
+            processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
 
-                # Print details for each frequency
-                for i, component in enumerate(analysis_result[key], 1):
-                    frequency = component["Frequency"]
-                    amplitude = component["Amplitude"]
-                    phase = component["Phase"]
-
-                    print(f"Component {i}:")
-                    print(f"\tFrequency: {frequency:.2f}")
-                    print(f"\tAmplitude: {amplitude:.2f}")
-                    print(f"\tPhase: {phase:.2f} rad")
-
-            # Process the data to find A, B, and phase difference
-            processed_data = function_analysis.process_data(gen_x, gen_y)
-
-            # Find A and B and phase difference
-            A = processed_data["A"]
-            B = processed_data["B"]
             phase_difference_in_pi = processed_data["Phase difference"]
-
-            # Adjusting the frequency according to the number of points in a cycle
-            base_points = 500
-            adjustment_factor = base_points / len(gen_x)
-
-            # Adjust the frequency because we only use one period of data
-            f1 = f1 / adjustment_factor
-            f2 = f2 / adjustment_factor
+            f1 = processed_data["f1"]
+            f2 = processed_data["f2"]
 
             print(f"Phase difference: {phase_difference_in_pi}π radians")
 
@@ -312,25 +297,38 @@ def create_app():
             else:
                 ax.set_aspect('auto')  # Reset to the default aspect
 
-            params = {'A': A, 'B': B, 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi,
-                      'n': len(gen_x)}
+            # params = {'A': A[0], 'B': B[0], 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi,
+            #           'n': len(gen_x)}
 
-            params_in = {'A': A, 'B': B, 'f1': f1, 'f2': f2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi, 'n': len(gen_x)}
+            params = {
+                'f1': f1,
+                'f2': f2,
+                'n': len(gen_x),
+                'A': A_x[0],
+                'B': B_y[0],
+                'p2': phase_difference_in_pi * np.pi,
+            }
 
+            # 为 gen_x 的每个分量动态添加A和p到params字典
+            for i, (Ax, px) in enumerate(zip(A_x, p_x), 1):
+                params[f'A_x{i}'] = Ax
+                params[f'p_x{i}'] = px
+
+            # 为 gen_y 的每个分量动态添加A和p到params字典
+            for i, (By, py) in enumerate(zip(B_y, p_y), 1):
+                params[f'B_y{i}'] = By
+                params[f'p_y{i}'] = py
+            print(params)
             for i, entry in enumerate(entries):
-                if PARAMETERS[i]['label'] in params_in:
+                if PARAMETERS[i]['label'] in params:
                     entry.delete(0, 'end')
-                    entry.insert(0, str(params_in[PARAMETERS[i]['label']]))
+                    entry.insert(0, str(params[PARAMETERS[i]['label']]))
 
             n = int(entries[7].get())
             T = safe_eval(entries[0].get())
             T_uniform = np.linspace(0, T, n)
 
-            ax.clear()
-            ax.scatter(gen_x, gen_y, label='Loaded data')
-            ax.set_title('Loaded Data')
-            ax.legend()
-            canvas.draw()
+            draw_plot(ax, canvas, gen_x, gen_y, 'Loaded data', 'Loaded data', clear=True, scatter=True)
 
             parameters_loaded = data_loaded = True
 
@@ -344,6 +342,8 @@ def create_app():
             new_fig, axs = plt.subplots(2, 1, figsize=(10, 8))
 
             # Plot gen_x in the first subplot
+
+
             axs[0].plot(gen_x, label='gen_x')
             axs[0].set_title('gen_x')
             axs[0].set_xlabel('Index')
@@ -466,16 +466,16 @@ def create_app():
             # Get the values from the checkboxes
             ifixb = [ifixb_dict[param].get() for param in ["A", "B", "w1", "w2", "p1", "p2"]]
 
-            params = {
-                'T': safe_eval(entries[0].get()),
-                'A': safe_eval(entries[1].get()),
-                'B': safe_eval(entries[2].get()),
-                'w1': safe_eval(entries[3].get()) * 2 * np.pi, # w = 2*pi*f
-                'w2': safe_eval(entries[4].get()) * 2 * np.pi,
-                'p1': safe_eval(entries[5].get()),
-                'p2': safe_eval(entries[6].get()),
-                'n': int(entries[7].get()),
-            }
+            params['T'] = safe_eval(entries[0].get())
+            params['A'] = safe_eval(entries[1].get())
+            params['B'] = safe_eval(entries[2].get())
+            params['w1'] = safe_eval(entries[3].get()) * 2 * np.pi
+            params['w2'] = safe_eval(entries[4].get()) * 2 * np.pi
+            params['p1'] = safe_eval(entries[5].get())
+            params['p2'] = safe_eval(entries[6].get())
+            params['n'] = int(entries[7].get())
+            print(params)
+
             fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, ifixb, filter_press_count)
 
             fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * T_uniform + fit_results["p1"])
