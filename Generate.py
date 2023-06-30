@@ -1,7 +1,7 @@
 import numpy as np
 import json
 
-
+#分支记录 6月30 差分进化
 def gen(T, A, B, w1, w2, p1, p2, n):
 
     t = np.random.uniform(0, T, n)

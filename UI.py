@@ -1,151 +1,75 @@
-import math
+import tkinter
 import tkinter as tk
-import tkinter.messagebox as messagebox
+from tkinter import messagebox
 from tkinter import ttk, filedialog, Toplevel, Label, Scale
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from ttkbootstrap import Style
 from Filter import run_fit
-from Generate import run_gen
 from tkinter import scrolledtext
-import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
-
-#import logging
-
-#logging.basicConfig(filename='error.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
-PARAMETERS = [
-    {"label": "T", "preset": '1', "tooltip": 'Input range: Any positive number'},
-    {"label": "A", "preset": '1', "tooltip": 'Input range: Any positive number'},
-    {"label": "B", "preset": '1', "tooltip": 'Input range: Any positive number'},
-    {"label": "f1", "preset": '1', "tooltip": 'Input range: Frequency, to get w= 2*pi*f'},
-    {"label": "f2", "preset": '1', "tooltip": 'Input range: Frequency, to get w= 2*pi*f'},
-    {"label": "p1", "preset": '0', "tooltip": 'Input range: x*pi or pi/x'},
-    {"label": "p2", "preset": 'pi', "tooltip": 'Input range: x*pi or pi/x'},
-    {"label": "n", "preset": '100', "tooltip": 'Input range: Better Larger than 0'}
-]
-
-
-class ToolTip(object):
-    def __init__(self, widget):
-        self.widget = widget
-        self.tipwindow = None
-        self.id = None
-        self.x = self.y = 0
-
-    def showtip(self, text):
-        self.text = text
-        if self.tipwindow or not self.text:
-            return
-        x, y, _, _ = self.widget.bbox("insert")
-        x = x + self.widget.winfo_rootx() + 25
-        y = y + self.widget.winfo_rooty() + 25
-        self.tipwindow = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(1)
-        tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(tw, text=self.text, justify=tk.LEFT,
-                         background="#ffffe0", relief=tk.SOLID, borderwidth=1,
-                         font=("tahoma", "8", "normal"))
-        label.pack(ipadx=1)
-
-    def hidetip(self):
-        tw = self.tipwindow
-        self.tipwindow = None
-        if tw:
-            tw.destroy()
-
-
-def create_tool_tip(widget, text):
-    tool_tip = ToolTip(widget)
-
-    def enter(event):
-        tool_tip.showtip(text)
-
-    def leave(event):
-        tool_tip.hidetip()
-
-    widget.bind('<Enter>', enter)
-    widget.bind('<Leave>', leave)
-
-
-def safe_eval(expr):
-    allowed = {
-        'math': math,
-        'pi': math.pi,
-    }
-    names = set(name for name in expr.split() if name.isalpha())
-
-    for name in names:
-        if name not in allowed:
-            raise ValueError(f'Not allowed: {name}')
-
-    return eval(expr, {'__builtins__': {}}, allowed)
-
-
-def create_label_and_entry(app, parameter, row):
-    label_text = parameter["label"]
-    preset_value = parameter["preset"]
-    tooltip_text = parameter["tooltip"]
-    label = ttk.Label(app, text=label_text, font=('Arial', 10))
-    label.grid(row=row, column=0, padx=5, pady=5)
-    entry = ttk.Entry(app, font=('Arial', 10))
-    entry.insert(0, preset_value)
-    entry.grid(row=row, column=1, padx=5, pady=5)
-    create_tool_tip(entry, tooltip_text)
-    return entry
+import threading
 
 
 def create_app():
-    app = tk.Tk()
-    app.style = Style(theme='flatly')
+    def display_parameters(original_params, fitted_params):
 
-    # Configure row and column weights
-    for i in range(12):
-        app.rowconfigure(i, weight=1)
-    for i in range(3):
-        app.columnconfigure(i, weight=1)
+        nonlocal param_window
+        # 创建一个新窗口
+        if param_window is not None:
+            param_window.destroy()
 
-    entries = [
-        create_label_and_entry(app, parameter, i) for i, parameter in enumerate(PARAMETERS)
-    ]
+        param_window = tk.Toplevel()
+        param_window.title("Data and Plot")
 
-    fig = Figure(figsize=(5, 5), dpi=100)
-    ax = fig.add_subplot(111)
-
-    # Create the canvas as a child of a Frame
-    frame = tk.Frame(app)
-    frame.grid(row=0, column=2, rowspan=8, padx=5, pady=5, sticky='nsew')
-    canvas = FigureCanvasTkAgg(fig, master=frame)
-    canvas.get_tk_widget().pack(fill='both', expand=True)
-
-
-    #checkbuttons
-    check_var1 = tk.IntVar(value=1)  # set initial to true
-    check_var2 = tk.IntVar(value=1)
-
-    check_button1 = ttk.Checkbutton(app, text="Show Original Data", variable=check_var1, style="TCheckbutton")
-    check_button1.grid(row=9, column=0, padx=10, pady=10)
-
-    check_button2 = ttk.Checkbutton(app, text="Show Fitted Data", variable=check_var2, style="TCheckbutton")
-    check_button2.grid(row=9, column=1, padx=10, pady=10)
-
-    data_loaded = False
-    parameters_loaded = False
-    filter_press_count = 0  # initialize counter at global scope
-
-    ifixb_dict = {param: tk.IntVar() for param in ["A", "B", "w1", "w2", "p1", "p2"]}
-    for param in ifixb_dict:
-        ifixb_dict[param].set(1)  # All checkboxes are checked by default (ifxib all set to 1)
+        data_frame = tk.Frame(param_window)
+        data_frame.pack(side="left", padx=10, pady=10)
+        #把f1和f2的内容除以pi后显示为x*pi的格式
+        fitted_params[5] = fitted_params[5] / (2 * np.pi)
+        fitted_params[4] = fitted_params[4] / (2 * np.pi)
 
 
 
-    # Initial value 0.05
-    beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
-    # Sub-window
+        # 创建一个表格
+        tree = ttk.Treeview(data_frame)
+
+        # 添加表格的列
+        tree["columns"] = ("Original Value", "Fitted Value")
+
+        # 设置表格的列宽
+        tree.column("#0", width=150)
+        tree.column("Original Value", width=150)
+        tree.column("Fitted Value", width=150)
+
+        # 设置表格的表头
+        tree.heading("#0", text="Parameter")
+        tree.heading("Original Value", text="Original Value")
+        tree.heading("Fitted Value", text="Fitted Value")
+
+        # 定义参数名称
+        param_names = ['A_x1', 'A_x2', 'B_y1', 'B_y2', 'f1', 'f2', 'p_x1', 'p_y1', 'p_x2', 'p_y2']
+
+        # 遍历参数，并将每个参数的名称和值添加到表格中
+        for i, param_name in enumerate(param_names):
+            original_value = original_params.get(param_name, 0)
+            fitted_value = fitted_params[i] if i < len(fitted_params) else "N/A"
+            tree.insert("", "end", text=param_name, values=(original_value, fitted_value))
+
+        # 显示表格
+        tree.pack()
+
+    def redraw_on_scale_change(*args):
+        # Check if data is loaded
+        if data_loaded:
+            if auto_scale_var.get() == 1:
+                ax.set_aspect('equal', 'box')
+            else:
+                ax.set_aspect('auto')  # Reset to the default aspect
+            draw_plot(ax, canvas, gen_x, gen_y, 'Loaded Data', 'Loaded data', scatter=True)
+
     def open_limit_window():
         limit_window = tk.Toplevel(app)
         limit_window.title("Set Beta Limit and Variability")
@@ -157,7 +81,6 @@ def create_app():
             beta_limit_labels[param].config(text=f"Beta Limit {param}: {beta_limit_dict[param]}")
 
         # Create a dictionary to hold the status of the checkboxes for each parameter
-
 
         beta_limit_labels = {}
         for i, param in enumerate(["A", "B", "w1", "w2", "p1", "p2"]):
@@ -171,12 +94,7 @@ def create_app():
             scale = tk.Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
                              command=lambda val, p=param: update_beta_limit(p, val))
             scale.grid(row=i, column=1, padx=(0, 5), pady=(0, 10), sticky='e')
-            scale.set(beta_limit_dict[param]) # Set the initial value to the last setting
-
-
-
-    button_set_limit = ttk.Button(app, text="Set Limit", command=open_limit_window)
-    button_set_limit.grid(row=11, column=0, padx=(0, 5), pady=(0, 10), sticky='e')
+            scale.set(beta_limit_dict[param])  # Set the initial value to the last setting
 
     def show_logs():
 
@@ -187,48 +105,12 @@ def create_app():
         txt['font'] = ('consolas', '12')
         txt.pack(expand=True, fill='both')
 
-
         # Load log file
         with open('filter_log.txt', 'r') as log_file:
             log_contents = log_file.read()
 
         # Insert log contents to the text widget
         txt.insert(tk.INSERT, log_contents)
-
-    # Create a 'Log' button
-    log_button = tk.Button(app, text="Log", command=show_logs)
-    log_button.grid(row=0, column=2, padx=(0, 5), pady=(0, 10), sticky='e')
-
-    # status_label = ttk.Label(app, text="Status: Data not loaded, Parameters not loaded", font=('Arial', 10))
-    # status_label.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
-
-    status_frame = ttk.Frame(app)
-    status_frame.grid(row=11, column=2, columnspan=2, padx=5, pady=0)
-
-    data_status_label = ttk.Label(status_frame, text="Data: Not Loaded", background="red", font=('Arial', 10))
-    data_status_label.pack(side="left", fill="x", expand=True)
-
-    parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red", font=('Arial', 10))
-    parameters_status_label.pack(side="left", fill="x", expand=True)
-
-    # Create a new IntVar for the auto scale checkbox
-    auto_scale_var = tk.IntVar()
-
-    # Create the auto scale checkbox
-    auto_scale_checkbox = ttk.Checkbutton(app, text="Auto Scale", variable=auto_scale_var, style="TCheckbutton")
-    auto_scale_checkbox.grid(row=9, column=2, padx=0, pady=5)  # Adjust the row and column as needed
-
-    def redraw_on_scale_change(*args):
-        # Check if data is loaded
-        if data_loaded:
-            if auto_scale_var.get() == 1:
-                ax.set_aspect('equal', 'box')
-            else:
-                ax.set_aspect('auto')  # Reset to the default aspect
-            draw_plot(ax, canvas, gen_x, gen_y, 'Loaded Data', 'Loaded data', scatter=True)
-
-    # Attach the callback to the Checkbutton
-    auto_scale_var.trace('w', redraw_on_scale_change)
 
     def draw_plot(ax, canvas, x, y, title, label, clear=True, scatter=True):
         if clear:
@@ -245,30 +127,23 @@ def create_app():
             ax.set_aspect('auto')  # Reset to the default aspect
         canvas.draw()
 
-
-    previous_window = None
-
-
-
     def load_file():
-        nonlocal gen_x, gen_y, T_uniform, data_loaded, params, parameters_loaded, t_measured, previous_window
+        nonlocal gen_x, gen_y, data_loaded, params, parameters_loaded, t_measured, previous_window
         file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
         if file_path:
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
             f1, f2, _, _, _, _, _, _ = parameters_data.values
-            w1, w2 = f1 * 2 * np.pi, f2 * 2 * np.pi  # w = 2πf
-
-            gen_x, gen_y, t_measured = data[0].values, data[1].values, data[2].values
+            gen_x, gen_y = data[0].values, data[1].values
 
             if previous_window is not None:
                 previous_window.destroy()
 
             # Only keep one period of data
-            gen_x, gen_y, t_measured = function_analysis.keep_one_period(gen_x, gen_y, t_measured)
-            #This part is prepared for the more complex x,y data
-            #by performing an FFT on them and obtaining the frequency, amplitude
+            gen_x, gen_y = function_analysis.keep_one_period(gen_x, gen_y)
+            # This part is prepared for the more complex x,y data
+            # by performing an FFT on them and obtaining the frequency, amplitude
             analysis_results = function_analysis.analyze_function(gen_x, gen_y)
 
             # Assign the returned result to a variable
@@ -276,19 +151,23 @@ def create_app():
             p_x = analysis_results["gen_x_phases"]
             B_y = analysis_results["gen_y_amplitudes"]
             p_y = analysis_results["gen_y_phases"]
+            f_x = analysis_results["gen_x_frequencies"]
+            f_y = analysis_results["gen_y_frequencies"]
             print("--------------")
             print(f"gen_x_amplitudes: {A_x}")
             print(f"gen_x_phases: {p_x}")
             print(f"gen_y_amplitudes: {B_y}")
             print(f"gen_y_phases: {p_y}")
+            print(f"gen_x_frequencies: {f_x}")
+            print(f"gen_y_frequencies: {f_y}")
             print("--------------")
 
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
 
             phase_difference_in_pi = processed_data["Phase difference"]
-            f1 = processed_data["f1"]
-            f2 = processed_data["f2"]
+            f1 = processed_data["f1"] / 10
+            f2 = processed_data["f2"] / 10
 
             print(f"Phase difference: {phase_difference_in_pi}π radians")
 
@@ -304,9 +183,6 @@ def create_app():
                 'f1': f1,
                 'f2': f2,
                 'n': len(gen_x),
-                'A': A_x[0],
-                'B': B_y[0],
-                'p2': phase_difference_in_pi * np.pi,
             }
 
             # 为 gen_x 的每个分量动态添加A和p到params字典
@@ -319,14 +195,6 @@ def create_app():
                 params[f'B_y{i}'] = By
                 params[f'p_y{i}'] = py
             print(params)
-            for i, entry in enumerate(entries):
-                if PARAMETERS[i]['label'] in params:
-                    entry.delete(0, 'end')
-                    entry.insert(0, str(params[PARAMETERS[i]['label']]))
-
-            n = int(entries[7].get())
-            T = safe_eval(entries[0].get())
-            T_uniform = np.linspace(0, T, n)
 
             draw_plot(ax, canvas, gen_x, gen_y, 'Loaded data', 'Loaded data', clear=True, scatter=True)
 
@@ -334,15 +202,37 @@ def create_app():
 
             update_status_label()
 
-            # Create a new Tkinter window
-            new_window = tk.Toplevel()
-            new_window.title("Data Plots")
+            xy_window = tk.Toplevel()
+            xy_window.title("Data and Plot")
 
-            # Create a new matplotlib figure and add subplots
-            new_fig, axs = plt.subplots(2, 1, figsize=(10, 8))
+            data_frame = tk.Frame(xy_window)
+            data_frame.pack(side="left", padx=10, pady=10)
 
-            # Plot gen_x in the first subplot
+            # 创建一个表格
+            tree = ttk.Treeview(data_frame)
 
+            # 添加表格的列
+            tree["columns"] = ("Value",)
+
+            # 设置表格的列宽
+            tree.column("#0", width=150)
+            tree.column("Value", width=150)
+
+            # 设置表格的表头
+            tree.heading("#0", text="Parameter")
+            tree.heading("Value", text="Value")
+
+            # 遍历参数字典，并将每个参数的名称和值添加到表格中
+            for param_name, param_value in params.items():
+                tree.insert("", "end", text=param_name, values=(param_value,))
+
+            # 显示表格
+            tree.pack()
+
+            plot_frame = tk.Frame(xy_window)
+            plot_frame.pack(side="right", padx=10, pady=10)
+
+            fig, axs = plt.subplots(2, 1, figsize=(6, 6))
 
             axs[0].plot(gen_x, label='gen_x')
             axs[0].set_title('gen_x')
@@ -350,24 +240,21 @@ def create_app():
             axs[0].set_ylabel('Value')
             axs[0].legend()
 
-            # Plot gen_y in the second subplot
             axs[1].plot(gen_y, label='gen_y')
             axs[1].set_title('gen_y')
             axs[1].set_xlabel('Index')
             axs[1].set_ylabel('Value')
             axs[1].legend()
 
-            new_fig.subplots_adjust(hspace=0.5)
+            plt.tight_layout()
 
-            # Embed the matplotlib figure in the Tkinter window
-            new_canvas = FigureCanvasTkAgg(new_fig, master=new_window)
-            new_canvas.draw()
-            new_canvas.get_tk_widget().pack()
+            canvas_plot = FigureCanvasTkAgg(fig, master=plot_frame)
+            canvas_plot.draw()
+            canvas_plot.get_tk_widget().pack()
 
-            previous_window = new_window
+            previous_window = xy_window
 
-            # Update the main window
-            new_window.update()
+            xy_window.update()
 
         if data_loaded:
             data_status_label.config(text="Data: Loaded", background="green")
@@ -379,189 +266,150 @@ def create_app():
         if data_loaded and parameters_loaded:
             filter_button['state'] = 'normal'
 
-
     # Checkbutton state change callback
     def redraw_on_check():
-        filter()
+        Fit()
+
+    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window):
+        try:
+            def progress_callback(xk, convergence):
+                current_progress = progress_var.get()
+                progress_var.set(min(current_progress + 2, 100))  # 我们每次增加2，最大值为100
+
+            fit_results = run_fit(x, y, params, filter_press_count, progress_callback=progress_callback)
+            fitted_params = fit_results["fitted_params"]
+
+            def update_ui():
+                display_parameters(params, fitted_params)
+
+                fit_x2 = fit_results["x_fit"]
+                fit_y2 = fit_results["y_fit"]
+
+                ax.clear()
+                if check_var1.get() == 1:
+                    draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
+                              scatter=True)
+                if check_var2.get() == 1:
+                    draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
+
+                progress_window.destroy()
+
+            app.after(0, update_ui)
+
+        except Exception as e:
+            tk.messagebox.showerror("Error", str(e))
+
+    def Fit():
+        nonlocal gen_x, gen_y, params, filter_press_count, new_window
+
+        if new_window is not None:
+            new_window.destroy()
+
+        filter_press_count += 1  # increment counter
+
+        progress_window = tk.Toplevel()
+        progress_window.title("Fitting Progress")
+
+        # 创建一个变量来存储进度值
+        progress_var = tk.DoubleVar()
+        progress_var.set(0)
+
+        progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100, length=300)
+        progress_bar.pack(padx=20, pady=20)
+
+        # Start a new thread to run the time-consuming fitting operation
+        fit_thread = threading.Thread(target=run_fit_in_thread,
+                                      args=(gen_x, gen_y, params, filter_press_count, progress_var, progress_window))
+        fit_thread.daemon = True  # Set as a daemon thread so that when the main program exits the thread will also exit
+        fit_thread.start()
+
+    # Initialize
+    data_loaded = False
+    parameters_loaded = False
+    filter_press_count = 0  # initialize counter at global scope
+    previous_window = None
+    gen_x, gen_y, t_measured = None, None, None
+    params = None
+    new_window = None
+    param_window = None
+    # Initial value 0.05
+    beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
+
+    app = tk.Tk()
+
+    # Configure row and column weights
+    for i in range(12):
+        app.rowconfigure(i, weight=1)
+
+    # Increase the weight of the column where the graph will be placed
+    app.columnconfigure(0, weight=1)
+    app.columnconfigure(1, weight=3)
+    app.columnconfigure(2, weight=3)
+
+    fig = Figure(figsize=(5, 5), dpi=100)
+    ax = fig.add_subplot(111)
+
+    # Create the canvas as a child of a Frame
+    frame = tk.Frame(app)
+    frame.grid(row=0, column=1, rowspan=12, columnspan=2, padx=5, pady=5, sticky='nsew')
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.get_tk_widget().pack(fill='both', expand=True)
+
+    # Check buttons
+    check_var1 = tk.IntVar(value=1)  # set initial to true
+    check_var2 = tk.IntVar(value=1)
+    auto_scale_var = tk.IntVar()
+
+    checks_frame = ttk.Frame(app)
+    checks_frame.grid(row=0, column=0, padx=10, pady=10, sticky='ew')
+
+    check_button1 = ttk.Checkbutton(checks_frame, text="Show Original Data", variable=check_var1)
+    check_button1.pack(side='top', padx=5, pady=5)
+
+    check_button2 = ttk.Checkbutton(checks_frame, text="Show Fitted Data", variable=check_var2)
+    check_button2.pack(side='top', padx=5, pady=5)
+
+    auto_scale_checkbox = ttk.Checkbutton(checks_frame, text="Auto Scale", variable=auto_scale_var)
+    auto_scale_checkbox.pack(side='top', padx=5, pady=5)
+    auto_scale_var.trace('w', redraw_on_scale_change)
+
+    ifixb_dict = {param: tk.IntVar() for param in ["A", "B", "w1", "w2", "p1", "p2"]}
+    for param in ifixb_dict:
+        ifixb_dict[param].set(1)  # All checkboxes are checked by default (ifxib all set to 1)
+
+    # Operation buttons
+    operations_frame = ttk.Frame(app)
+    operations_frame.grid(row=2, column=0, padx=10, pady=5, sticky='ew')
+
+    button_set_limit = ttk.Button(operations_frame, text="Set Limit", command=open_limit_window)
+    button_set_limit.pack(side='top', padx=5, pady=5, fill='x')
+
+    log_button = ttk.Button(operations_frame, text="Log", command=show_logs)
+    log_button.pack(side='top', padx=5, pady=5, fill='x')
+
+    # Status frame
+    status_frame = ttk.Frame(app)
+    status_frame.grid(row=3, column=0, padx=5, pady=5, sticky='ew')
+
+    data_status_label = ttk.Label(status_frame, text="Data: Not Loaded", background="red")
+    data_status_label.pack(side="top", fill="x", expand=True, padx=5, pady=5)
+
+    parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red")
+    parameters_status_label.pack(side="top", fill="x", expand=True, padx=5, pady=5)
 
     # Attach the callback to the Checkbuttons
     check_var1.trace('w', lambda *args: redraw_on_check())
     check_var2.trace('w', lambda *args: redraw_on_check())
 
-    # Initialize
-    cursor = None
-    gen_x, gen_y, t_measured= None, None, None
-    T_uniform = None
-    params = None
-    new_window = None
-    time_comparison_window = None
-
-
-
-    # Create a cursor class to show the x,y position
-    class Cursor(object):
-        def __init__(self, ax):
-            self.ax = ax
-            self.lx = ax.axhline(color='b')
-            self.ly = ax.axvline(color='b')
-            self.txt = ax.text(0.7, 0.9, '', transform=ax.transAxes)
-
-        def mouse_move(self, event):
-            if not event.inaxes:
-                return
-
-            x, y = event.xdata, event.ydata
-            # update the line positions
-            self.lx.set_ydata([y])
-            self.ly.set_xdata([x])
-
-            self.txt.set_text('x=%1.2f, y=%1.2f' % (x, y))
-            self.ax.figure.canvas.draw()
-
-    def generate():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params
-        gen_x, gen_y, T_uniform, params = None, None, None, None # To fix the bug mentioned 15/6/2023, just set params to None
-        try:
-            T = safe_eval(entries[0].get())
-            A = safe_eval(entries[1].get())
-            B = safe_eval(entries[2].get())
-            w1 = safe_eval(entries[3].get()) * 2 * np.pi # w= 2*pi*f
-            w2 = safe_eval(entries[4].get()) * 2 * np.pi
-            p1 = safe_eval(entries[5].get())
-            p2 = safe_eval(entries[6].get())
-            n = int(entries[7].get())
-
-            x, y = run_gen(T, A, B, w1, w2, p1, p2, n)
-            draw_plot(ax, canvas, x, y, 'Output', 'Output', clear=True, scatter=True)
-            gen_x, gen_y = x, y  # store generated values
-            T_uniform = np.linspace(0, T, 10000)
-            cursor = Cursor(ax)
-            canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
-            filter_button['state'] = 'normal'
-            # store generated parameters
-            params = {
-                'T': T,
-                'A': A,
-                'B': B,
-                'w1': w1,
-                'w2': w2,
-                'p1': p1,
-                'p2': p2,
-                'n': n,
-            }
-
-        except Exception as e:
-            tkinter.messagebox.showerror("Error", str(e))
-
-    def filter():
-        nonlocal cursor, gen_x, gen_y, T_uniform, params, beta_limit_dict, filter_press_count, new_window, time_comparison_window, ifixb_dict, t_measured
-        #To avoid too many sub-window exist, just close the previous windows.
-        if new_window is not None:
-            new_window.destroy()
-        if 'time_comparison_window' in locals() and time_comparison_window is not None:
-            time_comparison_window.destroy()
-
-        try:
-            filter_press_count += 1  # increment counter
-            # Get the values from the checkboxes
-            ifixb = [ifixb_dict[param].get() for param in ["A", "B", "w1", "w2", "p1", "p2"]]
-
-            params['T'] = safe_eval(entries[0].get())
-            params['A'] = safe_eval(entries[1].get())
-            params['B'] = safe_eval(entries[2].get())
-            params['w1'] = safe_eval(entries[3].get()) * 2 * np.pi
-            params['w2'] = safe_eval(entries[4].get()) * 2 * np.pi
-            params['p1'] = safe_eval(entries[5].get())
-            params['p2'] = safe_eval(entries[6].get())
-            params['n'] = int(entries[7].get())
-            print(params)
-
-            fit_results = run_fit(gen_x, gen_y, params, beta_limit_dict, ifixb, filter_press_count)
-
-            fit_x2 = fit_results["A"] * np.cos(fit_results["w1"] * T_uniform + fit_results["p1"])
-            fit_y2 = fit_results["B"] * np.cos(fit_results["w2"] * T_uniform + fit_results["p2"])
-
-            ax.clear()
-            if check_var1.get() == 1:
-                draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
-                          scatter=True)
-            if check_var2.get() == 1:
-                draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False,
-                          scatter=False)
-            cursor = Cursor(ax)
-
-            canvas.mpl_connect('motion_notify_event', cursor.mouse_move)
-        except Exception as e:
-            tkinter.messagebox.showerror("Error", str(e))
-            #logging.error("Exception occurred", exc_info=True)
-        #print(beta_limit_dict)
-        #print(ifixb)
-
-        # Create a new Toplevel window to display the parameters
-        new_window = tk.Toplevel(app)
-        new_window.title = ("Fit Result")
-
-        # Create a Treeview widget
-        tree = ttk.Treeview(new_window, columns=('Parameters', 'Values'), show='headings')
-        tree.heading('Parameters', text='Parameters', anchor=tk.CENTER)
-        tree.heading('Values', text='Values', anchor=tk.CENTER)
-
-        # Change the column width and alignment
-        tree.column('Parameters', width=100, anchor=tk.CENTER)
-        tree.column('Values', width=500, anchor=tk.CENTER)
-
-        # Insert the parameter limits
-        #tree.insert('', 'end', values=("Parameter limits", str(beta_limit_dict)))
-
-        # Insert the parameter values
-        for param in ['A', 'B', 'w1', 'w2', 'p1', 'p2', 'chi']:
-            if param in fit_results:
-                tree.insert('', 'end', values=(param, fit_results[param]))
-
-        tree.pack()
-
-        # Extract the fitted times
-        t_fitted = np.array(fit_results["fitted time"])
-        time_differences = t_fitted - t_measured
-
-
-        time_comparison_window = tk.Toplevel(app)
-        time_comparison_window.title = ("Time Comparison")
-        time_comparison_canvas = FigureCanvasTkAgg(Figure(figsize=(5, 10)), master=time_comparison_window)
-        time_comparison_canvas.draw()
-        time_comparison_canvas.get_tk_widget().pack()
-        time_comparison_figure = time_comparison_canvas.figure
-
-        # Plot the measured times and fitted times in a subplot
-        time_comparison_ax1 = time_comparison_figure.add_subplot(211)
-        time_comparison_ax1.plot(t_measured, label="Measured Times", marker='o')
-        time_comparison_ax1.plot(t_fitted, label="Fitted Times", marker='x')
-        time_comparison_ax1.set_xlabel("Data Point Index")
-        time_comparison_ax1.set_ylabel("Time")
-        time_comparison_ax1.legend()
-
-        # Plot the time differences in another subplot
-        time_comparison_ax2 = time_comparison_figure.add_subplot(212)
-        time_comparison_ax2.scatter(range(len(time_differences)), time_differences, marker='o')
-        time_comparison_ax2.set_xlabel("Data Point Index")
-        time_comparison_ax2.set_ylabel("Time Difference")
-
-        time_comparison_figure.subplots_adjust(hspace=0.5)# Adjust the spacing between the subplots
-
+    # Buttons
     buttons_frame = ttk.Frame(app)
-    buttons_frame.grid(row=8, column=0, columnspan=4, padx=10, pady=10, sticky='nsew')
-    for i in range(4):
-        buttons_frame.grid_columnconfigure(i, weight=1)
+    buttons_frame.grid(row=1, column=0, padx=10, pady=10, sticky='ew')
 
-    generate_button = ttk.Button(buttons_frame, text="Generate", command=generate, style="info.TButton")
-    generate_button.grid(row=0, column=0, padx=10, pady=10, sticky='nsew')
+    filter_button = ttk.Button(buttons_frame, text="Fit", command=Fit, state='disabled')
+    filter_button.pack(side='top', padx=10, pady=10, fill='x')
 
-    # Here, we use buttons_frame as the parent widget instead of app
-    filter_button = ttk.Button(buttons_frame, text="Fit", command=filter, style="info.TButton", state='disabled')
-    filter_button.grid(row=0, column=1, padx=10, pady=10, sticky='nsew')
-
-    load_button = ttk.Button(buttons_frame, text="Load Data & Parameters", command=load_file, style="info.TButton")
-    load_button.grid(row=0, column=2, padx=10, pady=10, sticky='nsew')
+    load_button = ttk.Button(buttons_frame, text="Load Data & Parameters", command=load_file)
+    load_button.pack(side='top', padx=10, pady=10, fill='x')
 
     app.mainloop()
 

@@ -18,7 +18,9 @@ def analyze_function(gen_x, gen_y):
         "gen_x_amplitudes": [],
         "gen_x_phases": [],
         "gen_y_amplitudes": [],
-        "gen_y_phases": []
+        "gen_y_phases": [],
+        "gen_x_frequencies": [],
+        "gen_y_frequencies": []
     }
 
     # Find the dominant frequency of gen_x
@@ -26,16 +28,20 @@ def analyze_function(gen_x, gen_y):
         if abs_ft_gen_x[i] > 0.2:  # set the boundary of important frequency components
             amplitude = abs_ft_gen_x[i]
             phase = angle_ft_gen_x[i]
+            frequency = freq_gen_x[i]
             results["gen_x_amplitudes"].append(amplitude)
             results["gen_x_phases"].append(phase)
+            results["gen_x_frequencies"].append(frequency)
 
     # Find the dominant frequency of gen_y
     for i in range(len(freq_gen_y)):
         if abs_ft_gen_y[i] > 0.2:  # set the boundary of important frequency components
             amplitude = abs_ft_gen_y[i]
             phase = angle_ft_gen_y[i]
+            frequency = freq_gen_y[i]
             results["gen_y_amplitudes"].append(amplitude)
             results["gen_y_phases"].append(phase)
+            results["gen_y_frequencies"].append(frequency)
 
     return results
 
@@ -71,7 +77,7 @@ def process_data(gen_x, gen_y, f1, f2):
     return {"Phase difference": phase_difference_in_pi, "f1": f1, "f2": f2}
 
 
-def keep_one_period(gen_x, gen_y, t_measured):
+def keep_one_period(gen_x, gen_y):
     # Calculate the Fourier Transform
     fourier_transform = np.fft.rfft(gen_y)
     abs_fourier_transform = np.abs(fourier_transform)
@@ -81,4 +87,4 @@ def keep_one_period(gen_x, gen_y, t_measured):
     period = int(np.round(1 / dominant_frequency))
 
     # Only keep one period of data
-    return gen_x[:period], gen_y[:period], t_measured[:period]
+    return gen_x[:period], gen_y[:period]

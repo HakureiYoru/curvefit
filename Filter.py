@@ -2,6 +2,8 @@ import numpy as np
 import json
 import logging
 from scipy.odr import Model, Data, ODR
+from scipy.optimize import differential_evolution
+import matplotlib.pyplot as plt
 
 # Configure logging
 logger = logging.getLogger('filter_logger')
@@ -10,139 +12,91 @@ file_handler = logging.FileHandler('filter_log.txt', 'w')  # Add 'w' mode for ov
 logger.addHandler(file_handler)
 
 
-def calculate_best_times(A, B, w1, w2, p1, p2, x, y):
-    # Find the 2 possible times which could be responsible for the x value.
-    tx0 = ((0 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
-    print("tx0:", tx0[0])
-    tx1 = ((1 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
-    print("tx1:", tx1[0])
+def parametric_equations(t, params):
 
-    # Find the 2 possible times which could be responsible for the y value.
-    ty0 = ((0 * np.pi + np.arccos(np.clip(y / B, -1, 1))) - p2) / w2
-    print("ty0:", ty0[0])
+    A1, A2, B1, B2, w1, w2, p1, p2, p3, p4 = params
 
-    ty1 = ((1 * np.pi + np.arccos(np.clip(y / B, -1, 1))) - p2) / w2
-    print("ty1:", ty1[0])
+    if np.abs(A2) < 1e-6:
+        w2 = 0
 
-    # Work out all magnitudes of the differences of the pairs of x and y times
-    d00 = np.abs(tx0 - ty0)
-    print("d00:", d00[0])
-    d01 = np.abs(tx0 - ty1)
-    print("d01:", d01[0])
-    d10 = np.abs(tx1 - ty0)
-    print("d10:", d10[0])
-    d11 = np.abs(tx1 - ty1)
-    print("d11:", d11[0])
+    x = A1 * np.cos(w1 * t + p1) + A2 * np.cos(w2 * t + p3)
+    y = B1 * np.cos(w1 * t + p2) + B2 * np.cos(w2 * t + p4)
+    return x, y
 
-    # Default to tx0 until we know better
-    t_result = np.copy(tx0)
-    print("t_result:", t_result[0])
-    print("----------------------")
+def objective_function(params, x_obs, y_obs):
 
-    # If we know that tx0 is the best time, then we can use that as the result
-    np.putmask(t_result, ((d10 < d00) & (d10 < d01)) | ((d11 < d00) & (d11 < d01)), tx1)
-
-    # Save the non-accumulated result
-    non_accumulated_result = np.copy(t_result)
-
-    # Estimate time interval by averaging the absolute differences between adjacent times
-    time_diffs = np.abs(np.diff(t_result))
-    estimated_interval = np.mean(time_diffs)
-
-    # Accumulate time with estimated_interval
-    for i in range(1, len(t_result)):
-        t_result[i] = t_result[0] + i * estimated_interval
-
-    return {
-        "non_accumulated_result": non_accumulated_result.tolist(),
-        "accumulated_result": t_result.tolist()
-    }
+    t_est = np.linspace(0, 10, len(x_obs) * 10)
+    x_est, y_est = parametric_equations(t_est, params)
+    x_est = np.interp(np.linspace(0, 10, len(x_obs)), t_est, x_est)
+    y_est = np.interp(np.linspace(0, 10, len(x_obs)), t_est, y_est)
+    return np.sum((x_est - x_obs) ** 2 + (y_est - y_obs) ** 2)
 
 
-def run_fit(x=None, y=None, params=None, beta_limit_dict=None, ifixb=None, filter_press_count=None):
-    required_keys = ["A", "B", "w1", "w2", "p1", "p2"]
-    for key in required_keys:
-        if key not in params:
-            params[key] = 0
+def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callback=None):
 
-    for key in required_keys:
-        if key not in beta_limit_dict:
-            beta_limit_dict[key] = [0, 0]
+    A1 = params.get('A_x1', 0)
+    A2 = params.get('A_x2', 0)
+    B1 = params.get('B_y1', 0)
+    B2 = params.get('B_y2', 0)
+    w1 = params.get('f1', 0) * 2 * np.pi
+    w2 = params.get('f2', 0) * 2 * np.pi
+    p1 = params.get('p_x1', 0)
+    p2 = params.get('p_y1', 0)
+    p3 = params.get('p_x2', 0)
+    p4 = params.get('p_y2', 0)
+    param_list = [A1, A2, B1, B2, w1, w2, p1, p2, p3, p4]
 
-    beta_orig = np.array([params[param] for param in required_keys])
-    beta_limit = [beta_limit_dict[param] for param in required_keys]
+    # 构建bounds
+    def calculate_bounds(param_value, factor=0.5):
+        # 如果参数值为0，设置一个默认边界范围
+        if param_value == 0:
+            return (0, 0)
 
-    def f(beta, x):
-        A, B, w1, w2, p1, p2 = beta
-        dA, dB, dw1, dw2, dp1, dp2 = beta_limit
-        param_check = (A >= beta_orig[0] - dA) & (A <= beta_orig[0] + dA) & \
-                      (B >= beta_orig[1] - dB) & (B <= beta_orig[1] + dB) & \
-                      (w1 >= beta_orig[2] - dw1) & (w1 <= beta_orig[2] + dw1) & \
-                      (w2 >= beta_orig[3] - dw2) & (w2 <= beta_orig[3] + dw2) & \
-                      (p1 >= beta_orig[4] - dp1) & (p1 <= beta_orig[4] + dp1) & \
-                      (p2 >= beta_orig[5] - dp2) & (p2 <= beta_orig[5] + dp2)
+        # 根据参数值动态计算边界
+        range_delta = factor * abs(param_value)
+        lower_bound = param_value - range_delta
+        upper_bound = param_value + range_delta
 
-        if not np.all(param_check):
-            return 0
+        # 确保下限不大于上限
+        if lower_bound > upper_bound:
+            lower_bound, upper_bound = upper_bound, lower_bound
 
-        t0 = ((0 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
-        t1 = ((1 * np.pi + np.arccos(np.clip(x / A, -1, 1))) - p1) / w1
-        y0calc = B * np.cos(w2 * t0 + p2)
-        y1calc = B * np.cos(w2 * t1 + p2)
-        return np.where(np.abs(y - y0calc) < np.abs(y - y1calc), y0calc, y1calc)
+        return lower_bound, upper_bound
 
-    T2data = Data(x, y, np.full_like(x, 0.01), np.full_like(y, 0.01))
-    T2model = Model(f)
-    myodr = ODR(T2data, T2model, beta0=beta_orig, ifixb=ifixb)
-    myodr.set_job(fit_type=0)
-    output = myodr.run()
+    bounds = []
+    for param_value in param_list:
+        bounds.append(calculate_bounds(param_value))
 
-    i = 1
-    while output.info != 1 and i < 20:
-        output = myodr.restart()
-        i += 1
+    print("params:", params)
+    print("param_list:", param_list)
+    print("bounds:", bounds)
 
-    chi_squared = output.sum_square
+    result = differential_evolution(objective_function, bounds, args=(x, y), maxiter=1000, popsize=20, callback=progress_callback)
 
-    # E = f(output.beta, x)
-    # O = y
-    # chi_squared_per_point = (O - E) ** 2 / (E + 1e-6) # avoid /0
+    fitted_params = result.x
 
-    t_result_dict = calculate_best_times(
-        output.beta[0], output.beta[1],
-        output.beta[2], output.beta[3],
-        output.beta[4], output.beta[5],
-        output.xplus, output.y
-    )
+    t_fit = np.linspace(0, 10, 2000)
+    x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
-    # Save the result to a JSON file
-    with open('t_result.json', 'w') as json_file:
-        json.dump(t_result_dict, json_file)
-
+    # Logging
     logger.info("------------")
     logger.info(f'Running run_fit function {filter_press_count} times.')
-    logger.info("ODR results:")
     logger.info(f"Input parameters: {params}")
-    logger.info(f"Parameter limits: {beta_limit_dict}")
-    logger.info(f"Output parameters: {output.beta}")
-    logger.info(f"Stop reason: {output.stopreason}")
-    logger.info(f"Chi: {chi_squared}")
-    # logger.info(f"Chi per point: {chi_squared_per_point}")
+    logger.info(f"Output parameters: {fitted_params}")
     logger.info("------------")
-    logger.info(f"Fitted x: {output.xplus}")
-    logger.info(f"Fitted y: {output.y}")
+    logger.info(f"Fitted x: {x_fit}")
+    logger.info(f"Fitted y: {y_fit}")
+
+    # Save x_fit and y_fit to a JSON file
+    output_data = {
+        "x_fit": x_fit.tolist(),
+        "y_fit": y_fit.tolist()
+    }
+    with open("output_new_xy.json", "w") as output_file:
+        json.dump(output_data, output_file)
 
     return {
-        "A": output.beta[0],
-        "B": output.beta[1],
-        "w1": output.beta[2],
-        "w2": output.beta[3],
-        "p1": output.beta[4],
-        "p2": output.beta[5],
-        "chi": chi_squared,
-        # "chi_per_point": chi_squared_per_point.tolist(),
-        "fitted time": t_result_dict["accumulated_result"],
-        "x_fitp": output.xplus,
-        "y_fitp": output.y
+        "fitted_params": fitted_params.tolist(),
+        "x_fit": x_fit.tolist(),
+        "y_fit": y_fit.tolist()
     }
-
