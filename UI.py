@@ -18,7 +18,7 @@ def create_app():
     def display_parameters(original_params, fitted_params):
 
         nonlocal param_window
-        # 创建一个新窗口
+
         if param_window is not None:
             param_window.destroy()
 
@@ -27,38 +27,28 @@ def create_app():
 
         data_frame = tk.Frame(param_window)
         data_frame.pack(side="left", padx=10, pady=10)
-        #把f1和f2的内容除以pi后显示为x*pi的格式
+
         fitted_params[5] = fitted_params[5] / (2 * np.pi)
         fitted_params[4] = fitted_params[4] / (2 * np.pi)
 
-
-
-        # 创建一个表格
         tree = ttk.Treeview(data_frame)
 
-        # 添加表格的列
         tree["columns"] = ("Original Value", "Fitted Value")
-
-        # 设置表格的列宽
         tree.column("#0", width=150)
         tree.column("Original Value", width=150)
         tree.column("Fitted Value", width=150)
 
-        # 设置表格的表头
         tree.heading("#0", text="Parameter")
         tree.heading("Original Value", text="Original Value")
         tree.heading("Fitted Value", text="Fitted Value")
 
-        # 定义参数名称
         param_names = ['A_x1', 'A_x2', 'B_y1', 'B_y2', 'f1', 'f2', 'p_x1', 'p_y1', 'p_x2', 'p_y2']
 
-        # 遍历参数，并将每个参数的名称和值添加到表格中
         for i, param_name in enumerate(param_names):
             original_value = original_params.get(param_name, 0)
             fitted_value = fitted_params[i] if i < len(fitted_params) else "N/A"
             tree.insert("", "end", text=param_name, values=(original_value, fitted_value))
 
-        # 显示表格
         tree.pack()
 
     def redraw_on_scale_change(*args):
@@ -144,7 +134,7 @@ def create_app():
             gen_x, gen_y = function_analysis.keep_one_period(gen_x, gen_y)
             # This part is prepared for the more complex x,y data
             # by performing an FFT on them and obtaining the frequency, amplitude
-            analysis_results = function_analysis.analyze_function(gen_x, gen_y)
+            analysis_results = function_analysis.xy_fft(gen_x, gen_y)
 
             # Assign the returned result to a variable
             A_x = analysis_results["gen_x_amplitudes"]
@@ -208,25 +198,19 @@ def create_app():
             data_frame = tk.Frame(xy_window)
             data_frame.pack(side="left", padx=10, pady=10)
 
-            # 创建一个表格
             tree = ttk.Treeview(data_frame)
 
-            # 添加表格的列
             tree["columns"] = ("Value",)
 
-            # 设置表格的列宽
             tree.column("#0", width=150)
             tree.column("Value", width=150)
 
-            # 设置表格的表头
             tree.heading("#0", text="Parameter")
             tree.heading("Value", text="Value")
 
-            # 遍历参数字典，并将每个参数的名称和值添加到表格中
             for param_name, param_value in params.items():
                 tree.insert("", "end", text=param_name, values=(param_value,))
 
-            # 显示表格
             tree.pack()
 
             plot_frame = tk.Frame(xy_window)

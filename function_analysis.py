@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def analyze_function(gen_x, gen_y):
+def xy_fft(gen_x, gen_y):
     # Fourier transform of gen_x
     ft_gen_x = np.fft.rfft(gen_x)
     abs_ft_gen_x = np.abs(ft_gen_x) / (len(gen_x) / 2)

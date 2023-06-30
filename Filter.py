@@ -13,7 +13,6 @@ logger.addHandler(file_handler)
 
 
 def parametric_equations(t, params):
-
     A1, A2, B1, B2, w1, w2, p1, p2, p3, p4 = params
 
     if np.abs(A2) < 1e-6:
@@ -23,8 +22,8 @@ def parametric_equations(t, params):
     y = B1 * np.cos(w1 * t + p2) + B2 * np.cos(w2 * t + p4)
     return x, y
 
-def objective_function(params, x_obs, y_obs):
 
+def objective_function(params, x_obs, y_obs):
     t_est = np.linspace(0, 10, len(x_obs) * 10)
     x_est, y_est = parametric_equations(t_est, params)
     x_est = np.interp(np.linspace(0, 10, len(x_obs)), t_est, x_est)
@@ -33,7 +32,6 @@ def objective_function(params, x_obs, y_obs):
 
 
 def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callback=None):
-
     A1 = params.get('A_x1', 0)
     A2 = params.get('A_x2', 0)
     B1 = params.get('B_y1', 0)
@@ -48,16 +46,16 @@ def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callb
 
     # 构建bounds
     def calculate_bounds(param_value, factor=0.5):
-        # 如果参数值为0，设置一个默认边界范围
+        # set bounds to 0 if param value is 0 (sometime we don't have multiple sin function
         if param_value == 0:
             return (0, 0)
 
-        # 根据参数值动态计算边界
+        # calculate bounds by parameters
         range_delta = factor * abs(param_value)
         lower_bound = param_value - range_delta
         upper_bound = param_value + range_delta
 
-        # 确保下限不大于上限
+        # Make sure lower_bound < upper_bound
         if lower_bound > upper_bound:
             lower_bound, upper_bound = upper_bound, lower_bound
 
@@ -71,7 +69,8 @@ def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callb
     print("param_list:", param_list)
     print("bounds:", bounds)
 
-    result = differential_evolution(objective_function, bounds, args=(x, y), maxiter=1000, popsize=20, callback=progress_callback)
+    result = differential_evolution(objective_function, bounds, args=(x, y), maxiter=1000, popsize=20,
+                                    callback=progress_callback)
 
     fitted_params = result.x
 
