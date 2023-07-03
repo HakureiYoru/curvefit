@@ -124,7 +124,7 @@ def create_app():
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
-            f1, f2, _, _, _, _, _, _ = parameters_data.values
+            f1, f2, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val in parameters_data.values] # to remove "#" before f1
             gen_x, gen_y = data[0].values, data[1].values
 
             if previous_window is not None:
@@ -132,6 +132,9 @@ def create_app():
 
             # Only keep one period of data
             gen_x, gen_y = function_analysis.keep_one_period(gen_x, gen_y)
+
+            gen_x = gen_x.astype(float)
+            gen_y = gen_y.astype(float)
             # This part is prepared for the more complex x,y data
             # by performing an FFT on them and obtaining the frequency, amplitude
             analysis_results = function_analysis.xy_fft(gen_x, gen_y)
@@ -143,14 +146,14 @@ def create_app():
             p_y = analysis_results["gen_y_phases"]
             f_x = analysis_results["gen_x_frequencies"]
             f_y = analysis_results["gen_y_frequencies"]
-            print("--------------")
-            print(f"gen_x_amplitudes: {A_x}")
-            print(f"gen_x_phases: {p_x}")
-            print(f"gen_y_amplitudes: {B_y}")
-            print(f"gen_y_phases: {p_y}")
-            print(f"gen_x_frequencies: {f_x}")
-            print(f"gen_y_frequencies: {f_y}")
-            print("--------------")
+            # print("--------------")
+            # print(f"gen_x_amplitudes: {A_x}")
+            # print(f"gen_x_phases: {p_x}")
+            # print(f"gen_y_amplitudes: {B_y}")
+            # print(f"gen_y_phases: {p_y}")
+            # print(f"gen_x_frequencies: {f_x}")
+            # print(f"gen_y_frequencies: {f_y}")
+            # print("--------------")
 
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
@@ -218,6 +221,7 @@ def create_app():
 
             fig, axs = plt.subplots(2, 1, figsize=(6, 6))
 
+
             axs[0].plot(gen_x, label='gen_x')
             axs[0].set_title('gen_x')
             axs[0].set_xlabel('Index')
@@ -262,6 +266,9 @@ def create_app():
 
             fit_results = run_fit(x, y, params, filter_press_count, progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
+            estimated_times = fit_results["time_fit"]
+            time_diffs = np.diff(estimated_times)
+
 
             def update_ui():
                 display_parameters(params, fitted_params)
@@ -277,6 +284,25 @@ def create_app():
                     draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
 
                 progress_window.destroy()
+
+                # Create a new window to display the estimated times and their differences
+                time_window = tk.Toplevel()
+                time_window.title("Estimated Times and Time Differences")
+
+                fig, axs = plt.subplots(2)
+                axs[0].plot(estimated_times)
+                axs[0].set_title('Estimated Times')
+                axs[0].set_xlabel('Index')
+                axs[0].set_ylabel('Time')
+
+                axs[1].plot(time_diffs)
+                axs[1].set_title('Time Differences')
+                axs[1].set_xlabel('Index')
+                axs[1].set_ylabel('Difference')
+
+                canvas1 = FigureCanvasTkAgg(fig, master=time_window)
+                canvas1.draw()
+                canvas1.get_tk_widget().pack()
 
             app.after(0, update_ui)
 
