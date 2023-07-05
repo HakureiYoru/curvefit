@@ -26,7 +26,7 @@ def create_app():
         param_window.title("Data and Plot")
 
         data_frame = tk.Frame(param_window)
-        data_frame.pack(side="left", padx=10, pady=10)
+        data_frame.pack(side="left", padx=10, pady=10, expand=True, fill=tk.BOTH)
 
         fitted_params[5] = fitted_params[5] / (2 * np.pi)
         fitted_params[4] = fitted_params[4] / (2 * np.pi)
@@ -49,7 +49,7 @@ def create_app():
             fitted_value = fitted_params[i] if i < len(fitted_params) else "N/A"
             tree.insert("", "end", text=param_name, values=(original_value, fitted_value))
 
-        tree.pack()
+        tree.pack(expand=True, fill=tk.BOTH)
 
     def redraw_on_scale_change(*args):
         # Check if data is loaded
@@ -199,7 +199,7 @@ def create_app():
             xy_window.title("Data and Plot")
 
             data_frame = tk.Frame(xy_window)
-            data_frame.pack(side="left", padx=10, pady=10)
+            data_frame.pack(side="left", padx=10, pady=10,expand=True, fill=tk.BOTH)
 
             tree = ttk.Treeview(data_frame)
 
@@ -214,10 +214,10 @@ def create_app():
             for param_name, param_value in params.items():
                 tree.insert("", "end", text=param_name, values=(param_value,))
 
-            tree.pack()
+            tree.pack(expand=True, fill=tk.BOTH)
 
             plot_frame = tk.Frame(xy_window)
-            plot_frame.pack(side="right", padx=10, pady=10)
+            plot_frame.pack(side="right", padx=10, pady=10,expand=True, fill=tk.BOTH)
 
             fig, axs = plt.subplots(2, 1, figsize=(6, 6))
 
@@ -238,7 +238,7 @@ def create_app():
 
             canvas_plot = FigureCanvasTkAgg(fig, master=plot_frame)
             canvas_plot.draw()
-            canvas_plot.get_tk_widget().pack()
+            canvas_plot.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
             previous_window = xy_window
 
@@ -302,7 +302,7 @@ def create_app():
 
                 canvas1 = FigureCanvasTkAgg(fig, master=time_window)
                 canvas1.draw()
-                canvas1.get_tk_widget().pack()
+                canvas1.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
             app.after(0, update_ui)
 
