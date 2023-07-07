@@ -12,6 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
+import time
 
 
 def create_app():
@@ -258,16 +259,33 @@ def create_app():
     def redraw_on_check():
         Fit()
 
-    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window):
+    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label):
         try:
-            def progress_callback(xk, convergence):
+            def progress_callback(xk, convergence, progress_range=(0, 50)):
+                # 我们将进度条划分为两个部分，这个回调函数用于更新前半部分
                 current_progress = progress_var.get()
-                progress_var.set(min(current_progress + 2, 100))  # 我们每次增加2，最大值为100
+                progress_increment = (progress_range[1] - progress_range[0]) / 50  # 假设我们有50步
+                progress_var.set(min(current_progress + progress_increment, progress_range[1]))
+
+            # 设置标签文本为拟合过程
+            status_label.config(text="Fitting in progress...")
 
             fit_results = run_fit(x, y, params, filter_press_count, progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
+
+            # 设置标签文本为计算时间过程
+            status_label.config(text="Calculating times...")
+
             estimated_times = fit_results["time_fit"]
             time_diffs = np.diff(estimated_times)
+
+            # 模拟时间计算过程中的进度更新
+            for i in range(50, 101, 10):
+                time.sleep(0.5)  # 假设每步需要一些时间
+                progress_var.set(i)
+
+            # 设置标签文本为完成状态
+            status_label.config(text="Completed")
 
 
             def update_ui():
@@ -324,12 +342,17 @@ def create_app():
         progress_var = tk.DoubleVar()
         progress_var.set(0)
 
+        # 创建一个标签来显示状态信息
+        status_label = tk.Label(progress_window, text="Initializing...", font=("Arial", 12))
+        status_label.pack()
+
         progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100, length=300)
         progress_bar.pack(padx=20, pady=20)
 
         # Start a new thread to run the time-consuming fitting operation
         fit_thread = threading.Thread(target=run_fit_in_thread,
-                                      args=(gen_x, gen_y, params, filter_press_count, progress_var, progress_window))
+                                      args=(gen_x, gen_y, params, filter_press_count, progress_var, progress_window,
+                                            status_label))
         fit_thread.daemon = True  # Set as a daemon thread so that when the main program exits the thread will also exit
         fit_thread.start()
 

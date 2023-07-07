@@ -89,7 +89,7 @@ def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callb
     x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
     # Estimate the time of generation for the observed x and y values
-    t_obs_est = estimate_time(x, y, fitted_params)
+    t_obs_est = estimate_time(x, y, x_fit, y_fit, fitted_params)  # Pass x_fit and y_fit to estimate_time
 
     # Logging
     logger.info("------------")
@@ -118,36 +118,43 @@ def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callb
 
 
 # Function to estimate the time of generation for each pair of observed x and y values
-def estimate_time(x_obs, y_obs, fitted_params, t_range=(0, 10), resolution=1e-3):
+def estimate_time(x_obs, y_obs, x_fit, y_fit, fitted_params, t_range=(0, 10), resolution=1e-3, progress_callback=None):
     """
     Estimate the time of generation for each pair of observed x and y values based on the fitted parameters.
 
     Args:
         x_obs (np.array): The observed x values.
         y_obs (np.array): The observed y values.
+        x_fit (np.array): The fitted x values.
+        y_fit (np.array): The fitted y values.
         fitted_params (list): The parameters obtained from fitting.
         t_range (tuple): The range of time to search.
         resolution (float): The step size for the time search.
+        progress_callback (callable, optional): A callback function for updating progress.
 
     Returns:
         np.array: The estimated times of generation.
     """
     estimated_times = []
 
-    for x, y in zip(x_obs, y_obs):
+    total_points = len(x_obs)
+    for idx, (x, y) in enumerate(zip(x_obs, y_obs)):
         min_distance = float('inf')
         estimated_time = None
 
         # Loop through time and find the time that minimizes the distance to the observed points
-        for t in np.arange(t_range[0], t_range[1], resolution):
-            x_fit, y_fit = parametric_equations(t, fitted_params)
-            distance = (x_fit - x) ** 2 + (y_fit - y) ** 2
+        for t_idx, (x_f, y_f) in enumerate(zip(x_fit, y_fit)):
+            distance = (x_f - x) ** 2 + (y_f - y) ** 2
 
             if distance < min_distance:
                 min_distance = distance
-                estimated_time = t
+                estimated_time = t_range[0] + t_idx * resolution
 
         estimated_times.append(estimated_time)
+
+        # Call the progress_callback if it is provided
+        if progress_callback is not None:
+            progress_callback(idx / total_points * 100)
 
     # Normalize the estimated times
     estimated_times = np.array(estimated_times)
@@ -155,6 +162,8 @@ def estimate_time(x_obs, y_obs, fitted_params, t_range=(0, 10), resolution=1e-3)
 
     # Filter outliers
     return filter_outliers(estimated_times)
+
+
 
 
 # Function to filter out outliers in data using a standard deviation criteria
