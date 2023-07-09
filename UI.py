@@ -29,9 +29,6 @@ def create_app():
         data_frame = tk.Frame(param_window)
         data_frame.pack(side="left", padx=10, pady=10, expand=True, fill=tk.BOTH)
 
-        fitted_params[5] = fitted_params[5] / (2 * np.pi)
-        fitted_params[4] = fitted_params[4] / (2 * np.pi)
-
         tree = ttk.Treeview(data_frame)
 
         tree["columns"] = ("Original Value", "Fitted Value")
@@ -44,11 +41,19 @@ def create_app():
         tree.heading("Fitted Value", text="Fitted Value")
 
         param_names = ['A_x1', 'A_x2', 'B_y1', 'B_y2', 'f1', 'f2', 'p_x1', 'p_y1', 'p_x2', 'p_y2']
+        fitted_params[5] = fitted_params[5] / (2 * np.pi)
+        fitted_params[4] = fitted_params[4] / (2 * np.pi)
 
         for i, param_name in enumerate(param_names):
             original_value = original_params.get(param_name, 0)
             fitted_value = fitted_params[i] if i < len(fitted_params) else "N/A"
-            tree.insert("", "end", text=param_name, values=(original_value, fitted_value))
+            # Convert the value to pi unit if parameter is phase
+            if 'p_' in param_name:
+                original_value = round(original_value / np.pi, 2)
+                fitted_value = round(fitted_value / np.pi, 2) if isinstance(fitted_value, (int, float)) else "N/A"
+            tree.insert("", "end", text=param_name,
+                        values=(f"{original_value}π" if 'p_' in param_name else original_value,
+                                f"{fitted_value}π" if 'p_' in param_name else fitted_value))
 
         tree.pack(expand=True, fill=tk.BOTH)
 
@@ -164,8 +169,8 @@ def create_app():
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
 
-            f1 = processed_data["f1"] / 10
-            f2 = processed_data["f2"] / 10
+            f1 = processed_data["f1"]
+            f2 = processed_data["f2"]
 
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
