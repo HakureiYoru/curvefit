@@ -41,7 +41,7 @@ def objective_function(params, x_obs, y_obs):
 
 
 # Main function to perform the fitting
-def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callback=None):
+def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_count=None, progress_callback=None):
     # Extracting parameters from the input dictionary
     A1 = params.get('A_x1', 0)
     A2 = params.get('A_x2', 0)
@@ -54,28 +54,33 @@ def run_fit(x=None, y=None, params=None, filter_press_count=None, progress_callb
     p3 = params.get('p_x2', 0)
     p4 = params.get('p_y2', 0)
     param_list = [A1, A2, B1, B2, w1, w2, p1, p2, p3, p4]
+    param_names = ['A_x1', 'A_x2', 'B_y1', 'B_y2', 'f1', 'f2', 'p_x1', 'p_y1', 'p_x2', 'p_y2']  # Order matters
+
+    # print bounds factor dict
+    print("bounds_factor_dict:", bounds_factor_dict)
 
     # Function to calculate parameter bounds for optimization
-    def calculate_bounds(param_value, factor=0.5):
+    def calculate_bounds(param_name, param_value):
+        factor = bounds_factor_dict.get(param_name, 0.5)  # Default factor is 0.5 if not in the dict
         # Set bounds to 0 if the parameter value is 0
         if param_value == 0:
-            return (0, 0)
+            return 0, 0
         # Calculate bounds based on the parameter value
         range_delta = factor * abs(param_value)
-        lower_bound = param_value - 10
-        upper_bound = param_value + 10
+        lower_bound = param_value - range_delta
+        upper_bound = param_value + range_delta
         # Swap if necessary
         if lower_bound > upper_bound:
             lower_bound, upper_bound = upper_bound, lower_bound
         return lower_bound, upper_bound
 
     # Create bounds for each parameter
-    bounds = [calculate_bounds(param_value) for param_value in param_list]
+    bounds = [calculate_bounds(param_name, param_value) for param_name, param_value in zip(param_names, param_list)]
 
     # Print debugging information
-    # print("params:", params)
-    # print("param_list:", param_list)
-    # print("bounds:", bounds)
+    print("params:", params)
+    print("param_list:", param_list)
+    print("bounds:", bounds)
 
     # Perform the optimization using differential evolution
     result = differential_evolution(objective_function, bounds, args=(x, y), maxiter=1000, popsize=20,
@@ -162,8 +167,6 @@ def estimate_time(x_obs, y_obs, x_fit, y_fit, fitted_params, t_range=(0, 10), re
 
     # Filter outliers
     return filter_outliers(estimated_times)
-
-
 
 
 # Function to filter out outliers in data using a standard deviation criteria

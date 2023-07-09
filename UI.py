@@ -63,29 +63,33 @@ def create_app():
 
     def open_limit_window():
         limit_window = tk.Toplevel(app)
-        limit_window.title("Set Beta Limit and Variability")
+        limit_window.title("Set Parameter Factors")
 
-        # update the value of the beta_limit dictionary
-        def update_beta_limit(param, val):
-            beta_limit_dict[param] = round(float(val), 4)
+        # update the value of the bounds_factor dictionary
+        def update_bounds_factor(param, val):
+            bounds_factor_dict[param] = round(float(val), 2)
             # Update the text displayed on the label
-            beta_limit_labels[param].config(text=f"Beta Limit {param}: {beta_limit_dict[param]}")
+            bounds_factor_labels[param].config(text=f"Factor for {param}: {bounds_factor_dict[param]}")
 
-        # Create a dictionary to hold the status of the checkboxes for each parameter
+        # Initialize bounds_factor_dict with the current factor values
+        for param in params.keys():
+            if param == "n":  # Skip the parameter "n"
+                continue
+            bounds_factor_dict[param] = 0.5  # Set initial factor to 0.5
 
-        beta_limit_labels = {}
-        for i, param in enumerate(["A", "B", "w1", "w2", "p1", "p2"]):
-            # checkboxes
-            tk.Checkbutton(limit_window, text="Variable", variable=ifixb_dict[param]).grid(row=i, column=0, padx=(0, 5),
-                                                                                           pady=(0, 10))
+        # Create a dictionary to hold the labels for each parameter
+        bounds_factor_labels = {}
+        for i, param in enumerate(params.keys()):
+            if param == "n":  # Skip the parameter "n"
+                continue
+            bounds_factor_labels[param] = tk.Label(limit_window,
+                                                   text=f"Factor for {param}: {bounds_factor_dict[param]}")
+            bounds_factor_labels[param].grid(row=i, column=0, padx=3, pady=10, sticky='w')
 
-            beta_limit_labels[param] = tk.Label(limit_window, text=f"Beta Limit {param}: {beta_limit_dict[param]}")
-            beta_limit_labels[param].grid(row=i, column=2, padx=3, pady=10, sticky='w')
-
-            scale = tk.Scale(limit_window, from_=0, to=0.5, resolution=0.01, orient='horizontal',
-                             command=lambda val, p=param: update_beta_limit(p, val))
-            scale.grid(row=i, column=1, padx=(0, 5), pady=(0, 10), sticky='e')
-            scale.set(beta_limit_dict[param])  # Set the initial value to the last setting
+            factor_scale = tk.Scale(limit_window, from_=0, to=1, resolution=0.01, orient='horizontal',
+                                    command=lambda val, p=param: update_bounds_factor(p, val))
+            factor_scale.grid(row=i, column=1, padx=(0, 5), pady=(0, 10), sticky='e')
+            factor_scale.set(bounds_factor_dict[param])  # Set the initial factor to 0.5
 
     def show_logs():
 
@@ -119,13 +123,14 @@ def create_app():
         canvas.draw()
 
     def load_file():
-        nonlocal gen_x, gen_y, data_loaded, params, parameters_loaded, t_measured, previous_window
+        nonlocal gen_x, gen_y, data_loaded, params, parameters_loaded, t_measured, previous_window, bounds_factor_dict
         file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
         if file_path:
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
-            f1, f2, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val in parameters_data.values] # to remove "#" before f1
+            f1, f2, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val
+                                        in parameters_data.values]  # to remove "#" before f1
             gen_x, gen_y = data[0].values, data[1].values
 
             if previous_window is not None:
@@ -159,11 +164,8 @@ def create_app():
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
 
-            phase_difference_in_pi = processed_data["Phase difference"]
             f1 = processed_data["f1"] / 10
             f2 = processed_data["f2"] / 10
-
-            print(f"Phase difference: {phase_difference_in_pi}π radians")
 
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
@@ -188,7 +190,6 @@ def create_app():
             for i, (By, py) in enumerate(zip(B_y, p_y), 1):
                 params[f'B_y{i}'] = By
                 params[f'p_y{i}'] = py
-            print(params)
 
             draw_plot(ax, canvas, gen_x, gen_y, 'Loaded data', 'Loaded data', clear=True, scatter=True)
 
@@ -200,7 +201,7 @@ def create_app():
             xy_window.title("Data and Plot")
 
             data_frame = tk.Frame(xy_window)
-            data_frame.pack(side="left", padx=10, pady=10,expand=True, fill=tk.BOTH)
+            data_frame.pack(side="left", padx=10, pady=10, expand=True, fill=tk.BOTH)
 
             tree = ttk.Treeview(data_frame)
 
@@ -218,10 +219,9 @@ def create_app():
             tree.pack(expand=True, fill=tk.BOTH)
 
             plot_frame = tk.Frame(xy_window)
-            plot_frame.pack(side="right", padx=10, pady=10,expand=True, fill=tk.BOTH)
+            plot_frame.pack(side="right", padx=10, pady=10, expand=True, fill=tk.BOTH)
 
             fig, axs = plt.subplots(2, 1, figsize=(6, 6))
-
 
             axs[0].plot(gen_x, label='gen_x')
             axs[0].set_title('gen_x')
@@ -242,11 +242,13 @@ def create_app():
             canvas_plot.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
             previous_window = xy_window
+            bounds_factor_dict = {param_name: 0.5 for param_name in params}
 
             xy_window.update()
 
         if data_loaded:
             data_status_label.config(text="Data: Loaded", background="green")
+            button_set_limit['state'] = 'normal'
 
         if parameters_loaded:
             parameters_status_label.config(text="Parameters: Loaded", background="green")
@@ -254,6 +256,7 @@ def create_app():
     def update_status_label():
         if data_loaded and parameters_loaded:
             filter_button['state'] = 'normal'
+            button_set_limit['state'] = 'normal'
 
     # Checkbutton state change callback
     def redraw_on_check():
@@ -270,7 +273,8 @@ def create_app():
             # 设置标签文本为拟合过程
             status_label.config(text="Fitting in progress...")
 
-            fit_results = run_fit(x, y, params, filter_press_count, progress_callback=progress_callback)
+            fit_results = run_fit(x, y, params, bounds_factor_dict, filter_press_count,
+                                  progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
 
             # 设置标签文本为计算时间过程
@@ -286,7 +290,6 @@ def create_app():
 
             # 设置标签文本为完成状态
             status_label.config(text="Completed")
-
 
             def update_ui():
                 display_parameters(params, fitted_params)
@@ -366,7 +369,8 @@ def create_app():
     new_window = None
     param_window = None
     # Initial value 0.05
-    beta_limit_dict = {"A": 0.05, "B": 0.05, "w1": 0.05, "w2": 0.05, "p1": 0.05, "p2": 0.05}
+    # 定义空词典
+    bounds_factor_dict = dict()
 
     app = tk.Tk()
 
@@ -414,7 +418,7 @@ def create_app():
     operations_frame = ttk.Frame(app)
     operations_frame.grid(row=2, column=0, padx=10, pady=5, sticky='ew')
 
-    button_set_limit = ttk.Button(operations_frame, text="Set Limit", command=open_limit_window)
+    button_set_limit = ttk.Button(operations_frame, text="Set Bounds", command=open_limit_window, state='disabled')
     button_set_limit.pack(side='top', padx=5, pady=5, fill='x')
 
     log_button = ttk.Button(operations_frame, text="Log", command=show_logs)

@@ -46,25 +46,10 @@ def xy_fft(gen_x, gen_y):
     return results
 
 
-
 def process_data(gen_x, gen_y, f1, f2):
-
     # Find phase difference
     peak_index_x = np.argmax(gen_x)
     peak_index_y = np.argmax(gen_y)
-
-    index_difference = peak_index_y - peak_index_x
-    phase_difference = (2 * np.pi * index_difference / len(gen_x))
-
-    # If the phase difference is negative, convert it to a positive value
-    if phase_difference < 0:
-        phase_difference += 2 * np.pi
-
-    if phase_difference > np.pi:
-        phase_difference = 2 * np.pi - phase_difference
-
-    # Output phase difference in π format
-    phase_difference_in_pi = round(phase_difference / np.pi, 2)
 
     # Adjusting the frequency according to the number of points in a cycle
     base_points = 500
@@ -74,7 +59,7 @@ def process_data(gen_x, gen_y, f1, f2):
     f1 = f1 / adjustment_factor
     f2 = f2 / adjustment_factor
 
-    return {"Phase difference": phase_difference_in_pi, "f1": f1, "f2": f2}
+    return {"f1": f1, "f2": f2}
 
 
 def keep_one_period(gen_x, gen_y):
