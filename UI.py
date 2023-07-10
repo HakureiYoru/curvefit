@@ -14,17 +14,20 @@ import time
 from mpl_toolkits.mplot3d import Axes3D  # Import 3D plotting tools
 
 
-
 def create_app():
     def create_detector_time_map_ui(fit_x2, fit_y2, estimated_times, pixel_size=0.01):
         # Determine the range of the original coordinates
         nonlocal image_window
         if image_window is not None:
             image_window.destroy()
+
+        # Determine the range of the original coordinates
         x_min, x_max = np.min(fit_x2), np.max(fit_x2)
         y_min, y_max = np.min(fit_y2), np.max(fit_y2)
-        # Convert estimated_times to a NumPy array if it's not already one
-        estimated_times = np.array(estimated_times)
+        # print length of x and y
+        print(len(fit_x2))
+        print(len(fit_y2))
+
 
         # Determine the size of the detector
         detector_width = int(np.ceil((x_max - x_min) / pixel_size)) + 1
@@ -39,14 +42,18 @@ def create_app():
             y_pixel = int(np.floor((y - y_min) / pixel_size))
             counts[y_pixel, x_pixel] += 1  # Note the reversed order
 
-        # Calculate the period counts (the number of times each point appears in a period)
-        period_counts = np.floor(estimated_times / (2 * np.pi))
-
-        # Add the period counts to the counts array
-        for x, y, period_count in zip(fit_x2, fit_y2, period_counts):
+        # Create a list to store the ntimes values for each time point and the corresponding times
+        ntimes_list = []
+        times_list = []
+        for i, t in enumerate(estimated_times):
+            x = fit_x2[i]
+            y = fit_y2[i]
             x_pixel = int(np.floor((x - x_min) / pixel_size))
             y_pixel = int(np.floor((y - y_min) / pixel_size))
-            counts[y_pixel, x_pixel] += period_count  # Note the reversed order
+            ntimes = counts[y_pixel, x_pixel]
+            if ntimes > 1:
+                ntimes_list.append(ntimes)
+                times_list.append(t)
 
         # Create a new window to display the image
         image_window = tk.Toplevel()
@@ -54,20 +61,29 @@ def create_app():
 
         # Create a 3D plot
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        ax_map = fig.add_subplot(121, projection='3d')
         X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
-        ax.plot_surface(X, Y, counts, cmap='viridis')  # Plot the surface
+        ax_map.plot_surface(X, Y, counts, cmap='viridis')  # Plot the surface
+
         # Plot the points where ntime = 1
         mask_ntime_1 = counts == 1
-        ax.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
+        ax_map.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
 
         # Plot the points where ntime > 1
         mask_ntime_gt_1 = counts > 1
-        ax.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
-        ax.set_title('Detector Time Map')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('N-times')
+        ax_map.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
+
+        ax_map.set_title('Detector Time Map')
+        ax_map.set_xlabel('X')
+        ax_map.set_ylabel('Y')
+        ax_map.set_zlabel('N-times')
+
+        # Create a scatter plot for the ntimes and t distribution
+        ax_scatter = fig.add_subplot(122)
+        ax_scatter.scatter(times_list, ntimes_list, s=1)
+        ax_scatter.set_title('N-times and T Distribution')
+        ax_scatter.set_xlabel('T')
+        ax_scatter.set_ylabel('N-times')
 
         canvas = FigureCanvasTkAgg(fig, master=image_window)
         canvas.draw()
@@ -214,14 +230,6 @@ def create_app():
             p_y = analysis_results["gen_y_phases"]
             f_x = analysis_results["gen_x_frequencies"]
             f_y = analysis_results["gen_y_frequencies"]
-            # print("--------------")
-            # print(f"gen_x_amplitudes: {A_x}")
-            # print(f"gen_x_phases: {p_x}")
-            # print(f"gen_y_amplitudes: {B_y}")
-            # print(f"gen_y_phases: {p_y}")
-            # print(f"gen_x_frequencies: {f_x}")
-            # print(f"gen_y_frequencies: {f_y}")
-            # print("--------------")
 
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
@@ -328,12 +336,12 @@ def create_app():
 
         try:
             def progress_callback(xk, convergence, progress_range=(0, 50)):
-                # 我们将进度条划分为两个部分，这个回调函数用于更新前半部分
+                # We divide the progress bar into two parts, this callback function is used to update the first half
                 current_progress = progress_var.get()
                 progress_increment = (progress_range[1] - progress_range[0]) / 50  # 假设我们有50步
                 progress_var.set(min(current_progress + progress_increment, progress_range[1]))
 
-            # 设置标签文本为拟合过程
+            # Set the labelled text to the fitting process
             status_label.config(text="Fitting in progress...")
 
             fit_results = run_fit(x, y, params, bounds_factor_dict, filter_press_count,
@@ -348,7 +356,7 @@ def create_app():
 
             # 模拟时间计算过程中的进度更新
             for i in range(50, 101, 10):
-                time.sleep(0.5)  # 假设每步需要一些时间
+                time.sleep(0.2)  # 假设每步需要一些时间
                 progress_var.set(i)
 
             # 设置标签文本为完成状态
@@ -379,7 +387,7 @@ def create_app():
                 time_window.title("Estimated Times and Time Differences")
 
                 fig, axs = plt.subplots(2)
-                axs[0].plot(estimated_times)
+                axs[0].scatter(range(len(estimated_times)), estimated_times)
                 axs[0].set_title('Estimated Times')
                 axs[0].set_xlabel('Index')
                 axs[0].set_ylabel('Time')

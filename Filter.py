@@ -1,9 +1,8 @@
 import numpy as np
 import json
 import logging
-from scipy.odr import Model, Data, ODR
 from scipy.optimize import differential_evolution
-import matplotlib.pyplot as plt
+from scipy.ndimage.filters import median_filter
 
 # Configuring the logger
 logger = logging.getLogger('filter_logger')
@@ -52,9 +51,6 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     param_list = [A1, A2, B1, B2, w1, w2, p1, p2, p3, p4]
     param_names = ['A_x1', 'A_x2', 'B_y1', 'B_y2', 'f1', 'f2', 'p_x1', 'p_y1', 'p_x2', 'p_y2']  # Order matters
 
-    # print bounds factor dict
-    print("bounds_factor_dict:", bounds_factor_dict)
-
     # Function to calculate parameter bounds for optimization
     def calculate_bounds(param_name, param_value):
         factor = bounds_factor_dict.get(param_name, 0.5)  # Default factor is 0.5 if not in the dict
@@ -73,11 +69,6 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     # Create bounds for each parameter
     bounds = [calculate_bounds(param_name, param_value) for param_name, param_value in zip(param_names, param_list)]
 
-    # Print debugging information
-    print("params:", params)
-    print("param_list:", param_list)
-    print("bounds:", bounds)
-
     # Perform the optimization using differential evolution
     result = differential_evolution(objective_function, bounds, args=(x, y), maxiter=1000, popsize=20,
                                     callback=progress_callback)
@@ -90,7 +81,7 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
     # Estimate the time of generation for the observed x and y values
-    t_obs_est = estimate_time(x, y, x_fit, y_fit, fitted_params)  # Pass x_fit and y_fit to estimate_time
+    t_obs_est = estimate_time(x, y, x_fit, y_fit)  # Pass x_fit and y_fit to estimate_time
 
     # Logging
     logger.info("------------")
@@ -119,57 +110,18 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
 
 
 # Function to estimate the time of generation for each pair of observed x and y values
-def estimate_time(x_obs, y_obs, x_fit, y_fit, fitted_params, t_range=(0, 10), resolution=1e-3, progress_callback=None):
-    """
-    Estimate the time of generation for each pair of observed x and y values based on the fitted parameters.
+def estimate_time(x_obs, y_obs, x_fit, y_fit):
+    t_obs_est = []
+    for x, y in zip(x_obs, y_obs):
+        distances = np.sqrt((x_fit - x) ** 2 + (y_fit - y) ** 2)
+        t_est = np.argmin(distances) / 100  # Because t_fit is np.linspace(0, 10, 1000)
+        t_obs_est.append(t_est)
 
-    Args:
-        x_obs (np.array): The observed x values.
-        y_obs (np.array): The observed y values.
-        x_fit (np.array): The fitted x values.
-        y_fit (np.array): The fitted y values.
-        fitted_params (list): The parameters obtained from fitting.
-        t_range (tuple): The range of time to search.
-        resolution (float): The step size for the time search.
-        progress_callback (callable, optional): A callback function for updating progress.
+    # 将结果保存为 JSON
+    result = {
+        'estimated_times': t_obs_est
+    }
+    with open('result_time.json', 'w') as file:
+        json.dump(result, file)
 
-    Returns:
-        np.array: The estimated times of generation.
-    """
-    estimated_times = []
-
-    total_points = len(x_obs)
-    for idx, (x, y) in enumerate(zip(x_obs, y_obs)):
-        min_distance = float('inf')
-        estimated_time = None
-
-        # Loop through time and find the time that minimizes the distance to the observed points
-        for t_idx, (x_f, y_f) in enumerate(zip(x_fit, y_fit)):
-            distance = (x_f - x) ** 2 + (y_f - y) ** 2
-
-            if distance < min_distance:
-                min_distance = distance
-                estimated_time = t_range[0] + t_idx * resolution
-
-        estimated_times.append(estimated_time)
-
-        # Call the progress_callback if it is provided
-        if progress_callback is not None:
-            progress_callback(idx / total_points * 100)
-
-    # Normalize the estimated times
-    estimated_times = np.array(estimated_times)
-    estimated_times = (estimated_times - np.min(estimated_times)) / (
-                np.max(estimated_times) - np.min(estimated_times) + 1e-6)
-
-    # Filter outliers
-    return filter_outliers(estimated_times)
-
-
-# Function to filter out outliers in data using a standard deviation criteria
-def filter_outliers(data, m=3):
-    mean = np.mean(data)
-    std_dev = np.std(data)
-    # Filtering data points that are within m standard deviations from the mean
-    filtered_data = [x for x in data if (mean - m * std_dev < x < mean + m * std_dev)]
-    return np.array(filtered_data)  # Convert the result to a NumPy array
+    return np.array(t_obs_est)
