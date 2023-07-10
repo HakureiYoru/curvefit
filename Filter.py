@@ -17,10 +17,6 @@ def parametric_equations(t, params):
     # Unpacking parameters
     A1, A2, B1, B2, w1, w2, p1, p2, p3, p4 = params
 
-    # Handling case where A2 is close to zero
-    if np.abs(A2) < 1e-6:
-        w2 = 0
-
     # Defining parametric equations
     x = A1 * np.cos(w1 * t + p1) + A2 * np.cos(w2 * t + p3)
     y = B1 * np.cos(w1 * t + p2) + B2 * np.cos(w2 * t + p4)
@@ -90,7 +86,7 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     fitted_params = result.x
 
     # Generate the fitted x and y values
-    t_fit = np.linspace(0, 10, 2000)
+    t_fit = np.linspace(0, 10, 1000)
     x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
     # Estimate the time of generation for the observed x and y values
@@ -163,7 +159,8 @@ def estimate_time(x_obs, y_obs, x_fit, y_fit, fitted_params, t_range=(0, 10), re
 
     # Normalize the estimated times
     estimated_times = np.array(estimated_times)
-    estimated_times = (estimated_times - np.min(estimated_times)) / (np.max(estimated_times) - np.min(estimated_times))
+    estimated_times = (estimated_times - np.min(estimated_times)) / (
+                np.max(estimated_times) - np.min(estimated_times) + 1e-6)
 
     # Filter outliers
     return filter_outliers(estimated_times)

@@ -1,21 +1,78 @@
-import tkinter
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk, filedialog, Toplevel, Label, Scale
+from tkinter import messagebox, ttk, filedialog, Toplevel, Label, Scale, scrolledtext
 import numpy as np
+from matplotlib import colors
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from ttkbootstrap import Style
 from Filter import run_fit
-from tkinter import scrolledtext
 import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
 import time
+from mpl_toolkits.mplot3d import Axes3D  # Import 3D plotting tools
+
 
 
 def create_app():
+    def create_detector_time_map_ui(fit_x2, fit_y2, estimated_times, pixel_size=0.01):
+        # Determine the range of the original coordinates
+        nonlocal image_window
+        if image_window is not None:
+            image_window.destroy()
+        x_min, x_max = np.min(fit_x2), np.max(fit_x2)
+        y_min, y_max = np.min(fit_y2), np.max(fit_y2)
+        # Convert estimated_times to a NumPy array if it's not already one
+        estimated_times = np.array(estimated_times)
+
+        # Determine the size of the detector
+        detector_width = int(np.ceil((x_max - x_min) / pixel_size)) + 1
+        detector_height = int(np.ceil((y_max - y_min) / pixel_size)) + 1
+
+        # Initialize the counts array
+        counts = np.zeros((detector_height, detector_width))  # Note the reversed order
+
+        # Count the number of fitted points at each pixel
+        for x, y in zip(fit_x2, fit_y2):
+            x_pixel = int(np.floor((x - x_min) / pixel_size))
+            y_pixel = int(np.floor((y - y_min) / pixel_size))
+            counts[y_pixel, x_pixel] += 1  # Note the reversed order
+
+        # Calculate the period counts (the number of times each point appears in a period)
+        period_counts = np.floor(estimated_times / (2 * np.pi))
+
+        # Add the period counts to the counts array
+        for x, y, period_count in zip(fit_x2, fit_y2, period_counts):
+            x_pixel = int(np.floor((x - x_min) / pixel_size))
+            y_pixel = int(np.floor((y - y_min) / pixel_size))
+            counts[y_pixel, x_pixel] += period_count  # Note the reversed order
+
+        # Create a new window to display the image
+        image_window = tk.Toplevel()
+        image_window.title("Detector Time Map")
+
+        # Create a 3D plot
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
+        ax.plot_surface(X, Y, counts, cmap='viridis')  # Plot the surface
+        # Plot the points where ntime = 1
+        mask_ntime_1 = counts == 1
+        ax.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
+
+        # Plot the points where ntime > 1
+        mask_ntime_gt_1 = counts > 1
+        ax.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
+        ax.set_title('Detector Time Map')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('N-times')
+
+        canvas = FigureCanvasTkAgg(fig, master=image_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
+
     def display_parameters(original_params, fitted_params):
 
         nonlocal param_window
@@ -134,7 +191,7 @@ def create_app():
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
-            f1, f2, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val
+            f2, f1, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val
                                         in parameters_data.values]  # to remove "#" before f1
             gen_x, gen_y = data[0].values, data[1].values
 
@@ -268,6 +325,7 @@ def create_app():
         Fit()
 
     def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label):
+
         try:
             def progress_callback(xk, convergence, progress_range=(0, 50)):
                 # 我们将进度条划分为两个部分，这个回调函数用于更新前半部分
@@ -295,8 +353,11 @@ def create_app():
 
             # 设置标签文本为完成状态
             status_label.config(text="Completed")
+            # Create the detector time map
+            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"], estimated_times)
 
             def update_ui():
+                nonlocal time_window
                 display_parameters(params, fitted_params)
 
                 fit_x2 = fit_results["x_fit"]
@@ -310,6 +371,8 @@ def create_app():
                     draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
 
                 progress_window.destroy()
+                if time_window is not None:
+                    time_window.destroy()
 
                 # Create a new window to display the estimated times and their differences
                 time_window = tk.Toplevel()
@@ -373,6 +436,8 @@ def create_app():
     params = None
     new_window = None
     param_window = None
+    time_window = None
+    image_window = None
     # Initial value 0.05
     # 定义空词典
     bounds_factor_dict = dict()
