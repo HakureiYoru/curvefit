@@ -15,7 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
-    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01):
+    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.05):
         # Determine the range of the original coordinates
         nonlocal image_window
         if image_window is not None:
