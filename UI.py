@@ -11,59 +11,130 @@ import matplotlib.pyplot as plt
 import function_analysis
 import threading
 import time
-from mpl_toolkits.mplot3d import Axes3D  # Import 3D plotting tools
+from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
-    def create_detector_time_map_ui(fit_x2, fit_y2, estimated_times, pixel_size=0.01):
+    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01):
         # Determine the range of the original coordinates
         nonlocal image_window
         if image_window is not None:
             image_window.destroy()
 
+        def load_data():
+            file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
+            if file_path:
+                df = pd.read_csv(file_path, header=None, sep=" ")
+                parameters_data, data = df.iloc[0], df.iloc[1:]
+
+                f2, f1, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for
+                                            val in parameters_data.values]  # to remove "#" before f1
+                gen_x, gen_y = data[0].values.astype(float), data[1].values.astype(float)
+
+                # Calculate the pixel coordinates of the newly loaded data
+                gen_x_pixel = np.floor((gen_x - x_min) / pixel_size).astype(int)
+                gen_y_pixel = np.floor((gen_y - y_min) / pixel_size).astype(int)
+
+                # Ensure that the pixel coordinates are within the valid range
+                gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
+                gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
+
+                # Extract the time from the time map
+                gen_time = time_map[gen_y_pixel, gen_x_pixel]
+
+                # Clear the current figure
+                plt.clf()
+
+                # Add the 3D subplot
+                ax_map = fig.add_subplot(131, projection='3d')
+
+                # Plot the surface
+                X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
+                ax_map.plot_surface(X, Y, counts, cmap='viridis')
+
+                # Plot the points where ntime = 1
+                mask_ntime_1 = counts == 1
+                ax_map.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
+
+                # Plot the points where ntime > 1
+                mask_ntime_gt_1 = counts > 1
+                ax_map.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
+
+                ax_map.set_title('Detector Time Map')
+                ax_map.set_xlabel('X')
+                ax_map.set_ylabel('Y')
+                ax_map.set_zlabel('N-times')
+
+                # Add the counts heatmap
+                ax_counts = fig.add_subplot(132)
+                cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
+                fig.colorbar(cax1, ax=ax_counts)
+                ax_counts.set_title('Counts')
+
+                # Add the time map heatmap
+                ax_time_map = fig.add_subplot(133)
+                cax2 = ax_time_map.imshow(time_map, cmap='viridis', interpolation='nearest', origin='lower')
+                fig.colorbar(cax2, ax=ax_time_map)
+                ax_time_map.set_title('Time Map')
+
+                # Add the points to the time map heatmap
+                ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red',
+                                    s=100)  # Use a larger size (s) and a different color for these points
+
+                # Add labels for these points
+                for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
+                    label = f'({x},{y},{t})'
+                    ax_time_map.annotate(label,  # this is the text
+                                         (x, y),  # these are the coordinates to position the label
+                                         textcoords="offset points",  # how to position the text
+                                         xytext=(0, 10),  # distance from text to points (x,y)
+                                         ha='center')  # horizontal alignment can be left, right or center
+
+                # Redraw the figure
+                canvas.draw()
+
+                # Clear the Listbox
+                listbox.delete(0, tk.END)
+
+                # Add the times and corresponding x, y points to the Listbox widget
+                for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
+                    item = f"X: {x}, Y: {y}, Time: {t}"
+                    listbox.insert(tk.END, item)  # Add each item to the end of the Listbox
+
         # Determine the range of the original coordinates
-        x_min, x_max = np.min(fit_x2), np.max(fit_x2)
-        y_min, y_max = np.min(fit_y2), np.max(fit_y2)
+        x_min, x_max = np.min(fit_x), np.max(fit_x)
+        y_min, y_max = np.min(fit_y), np.max(fit_y)
         # print length of x and y
-        print(len(fit_x2))
-        print(len(fit_y2))
+        print(len(fit_x))
+        print(len(fit_y))
 
-
-        # Determine the size of the detector
-        detector_width = int(np.ceil((x_max - x_min) / pixel_size)) + 1
-        detector_height = int(np.ceil((y_max - y_min) / pixel_size)) + 1
+        detector_width = int(np.ceil((x_max - x_min) / pixel_size))
+        detector_height = int(np.ceil((y_max - y_min) / pixel_size))
 
         # Initialize the counts array
         counts = np.zeros((detector_height, detector_width))  # Note the reversed order
+        time_map = np.zeros((detector_height, detector_width))
 
         # Count the number of fitted points at each pixel
-        for x, y in zip(fit_x2, fit_y2):
+        for i, (x, y) in enumerate(zip(fit_x, fit_y)):
             x_pixel = int(np.floor((x - x_min) / pixel_size))
             y_pixel = int(np.floor((y - y_min) / pixel_size))
             counts[y_pixel, x_pixel] += 1  # Note the reversed order
-
-        # Create a list to store the ntimes values for each time point and the corresponding times
-        ntimes_list = []
-        times_list = []
-        for i, t in enumerate(estimated_times):
-            x = fit_x2[i]
-            y = fit_y2[i]
-            x_pixel = int(np.floor((x - x_min) / pixel_size))
-            y_pixel = int(np.floor((y - y_min) / pixel_size))
-            ntimes = counts[y_pixel, x_pixel]
-            if ntimes > 1:
-                ntimes_list.append(ntimes)
-                times_list.append(t)
+            time_map[y_pixel, x_pixel] = i  # Store the time
 
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
 
-        # Create a 3D plot
-        fig = plt.figure()
-        ax_map = fig.add_subplot(121, projection='3d')
+        # Create a new figure
+        fig = plt.figure(figsize=(18, 6))
+
+        # Add the 3D subplot
+        ax_map = fig.add_subplot(131, projection='3d')
+
+        # Plot the surface
         X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
-        ax_map.plot_surface(X, Y, counts, cmap='viridis')  # Plot the surface
+        ax_map.plot_surface(X, Y, counts, cmap='viridis')
 
         # Plot the points where ntime = 1
         mask_ntime_1 = counts == 1
@@ -78,16 +149,29 @@ def create_app():
         ax_map.set_ylabel('Y')
         ax_map.set_zlabel('N-times')
 
-        # Create a scatter plot for the ntimes and t distribution
-        ax_scatter = fig.add_subplot(122)
-        ax_scatter.scatter(times_list, ntimes_list, s=1)
-        ax_scatter.set_title('N-times and T Distribution')
-        ax_scatter.set_xlabel('T')
-        ax_scatter.set_ylabel('N-times')
+        # Add the counts heatmap
+        ax_counts = fig.add_subplot(132)
+        cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
+        fig.colorbar(cax1, ax=ax_counts)
+        ax_counts.set_title('Counts')
+
+        # Add the time map heatmap
+        ax_time_map = fig.add_subplot(133)
+        cax2 = ax_time_map.imshow(time_map, cmap='viridis', interpolation='nearest', origin='lower')
+        fig.colorbar(cax2, ax=ax_time_map)
+        ax_time_map.set_title('Time Map')
 
         canvas = FigureCanvasTkAgg(fig, master=image_window)
         canvas.draw()
         canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
+
+        # Create the "Load Data" button
+        load_button = tk.Button(master=image_window, text="Load Data", command=load_data)
+        load_button.pack()
+
+        # Create the Listbox widget for displaying time values
+        listbox = tk.Listbox(master=image_window, width=50, height=20)
+        listbox.pack()
 
     def display_parameters(original_params, fitted_params):
 
@@ -228,8 +312,8 @@ def create_app():
             p_x = analysis_results["gen_x_phases"]
             B_y = analysis_results["gen_y_amplitudes"]
             p_y = analysis_results["gen_y_phases"]
-            f_x = analysis_results["gen_x_frequencies"]
-            f_y = analysis_results["gen_y_frequencies"]
+            # f_x = analysis_results["gen_x_frequencies"]
+            # f_y = analysis_results["gen_y_frequencies"]
 
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
@@ -262,6 +346,16 @@ def create_app():
                 params[f'p_y{i}'] = py
 
             draw_plot(ax, canvas, gen_x, gen_y, 'Loaded data', 'Loaded data', clear=True, scatter=True)
+
+            # Marked every 50 points in the loaded data
+            for i in range(0, len(gen_x), 20):
+                x = gen_x[i]
+                y = gen_y[i]
+                label = f'({x:.2f}, {y:.2f}, {i})'
+                ax.annotate(label, (x, y), xytext=(5, -10), textcoords='offset points', ha='left', va='top')
+                ax.plot(x, y, 'ro', markersize=5)  # Highlighted points are red circles
+
+            canvas.draw()
 
             parameters_loaded = data_loaded = True
 
@@ -362,7 +456,7 @@ def create_app():
             # 设置标签文本为完成状态
             status_label.config(text="Completed")
             # Create the detector time map
-            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"], estimated_times)
+            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"])
 
             def update_ui():
                 nonlocal time_window
@@ -377,6 +471,14 @@ def create_app():
                               scatter=True)
                 if check_var2.get() == 1:
                     draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
+                    # 标记每过50个点的节点
+                    for i in range(0, len(fit_x2), 50):
+                        label = f'({fit_x2[i]:.2f}, {fit_y2[i]:.2f}, {i})'  # 标记文本包含了x、y和索引
+                        ax.annotate(label, (fit_x2[i], fit_y2[i]), xytext=(5, -10),
+                                    textcoords='offset points', ha='left', va='top')
+                        ax.plot(fit_x2[i], fit_y2[i], 'ro', markersize=5)  # 高亮标记的点为红色圆圈
+
+                canvas.draw()
 
                 progress_window.destroy()
                 if time_window is not None:

@@ -83,6 +83,10 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     # Estimate the time of generation for the observed x and y values
     t_obs_est = estimate_time(x, y, x_fit, y_fit)  # Pass x_fit and y_fit to estimate_time
 
+    # Note that this time is really just for end0.
+    # And the role of end was supposed to be just to derive the result of the fit parameter.
+    # There is no need to calculate the time.
+
     # Logging
     logger.info("------------")
     logger.info(f'Running run_fit function {filter_press_count} times.')
