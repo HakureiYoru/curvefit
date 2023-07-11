@@ -17,11 +17,44 @@ from mpl_toolkits.mplot3d import Axes3D
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.05):
         # Determine the range of the original coordinates
-        nonlocal image_window
+        nonlocal image_window,  ax_time_map
+        highlight = None
+        gen_x_pixel = None
+        gen_y_pixel = None
+        gen_time = None
+
         if image_window is not None:
             image_window.destroy()
 
+        def on_listbox_select(event):
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight
+
+            # Check if the variables have been initialized
+            if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
+                return
+
+            # Clear the previous scatter plot
+            if highlight is not None:
+                highlight.remove()
+
+            # Get the current selection from the Listbox
+            idx = listbox.curselection()
+            if idx:  # If there is a selection
+                idx = idx[0]
+
+                # Extract the x, y coordinates and the time from the selected item
+                x, y, t = gen_x_pixel[idx], gen_y_pixel[idx], gen_time[idx]
+
+                # Highlight the selected point
+                highlight = ax_time_map.scatter(x, y, c='magenta', s=500,
+                                                marker='*')  # Use a larger size (s), a different color (c), and a star marker
+                # Redraw the figure
+                canvas.draw()
+            else:
+                print("No selection")
+
         def load_data():
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map
             file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
             if file_path:
                 df = pd.read_csv(file_path, header=None, sep=" ")
@@ -171,6 +204,8 @@ def create_app():
 
         # Create the Listbox widget for displaying time values
         listbox = tk.Listbox(master=image_window, width=50, height=20)
+        listbox.bind('<<ListboxSelect>>',
+                     on_listbox_select)  # Bind the selection event to the on_listbox_select function
         listbox.pack()
 
     def display_parameters(original_params, fitted_params):
@@ -548,6 +583,8 @@ def create_app():
     param_window = None
     time_window = None
     image_window = None
+
+    ax_time_map = None  # Initialize ax_time_map
     # Initial value 0.05
     # 定义空词典
     bounds_factor_dict = dict()
