@@ -15,10 +15,11 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
+
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.05):
         # Determine the range of the original coordinates
         nonlocal image_window,  ax_time_map
-        highlight = None
+        highlight = []
         gen_x_pixel = None
         gen_y_pixel = None
         gen_time = None
@@ -34,20 +35,29 @@ def create_app():
                 return
 
             # Clear the previous scatter plot
-            if highlight is not None:
-                highlight.remove()
+            if highlight:
+                for h in highlight:
+                    h.remove()
+                highlight = []
 
             # Get the current selection from the Listbox
-            idx = listbox.curselection()
-            if idx:  # If there is a selection
-                idx = idx[0]
-
-                # Extract the x, y coordinates and the time from the selected item
-                x, y, t = gen_x_pixel[idx], gen_y_pixel[idx], gen_time[idx]
+            selected = treeview.selection()
+            if selected:  # If there is a selection
+                # Get the values of the selected row
+                x_str, y_str, t_str = treeview.item(selected, "values")
+                x = float(x_str)
+                y = float(y_str)
+                if t_str:  # Check if t_str is not empty
+                    t_values = list(map(float, t_str.split(', ')))
+                else:
+                    t_values = [0]
 
                 # Highlight the selected point
-                highlight = ax_time_map.scatter(x, y, c='magenta', s=500,
-                                                marker='*')  # Use a larger size (s), a different color (c), and a star marker
+                for t in t_values:
+                    h = ax_time_map.scatter(x, y, c='magenta', s=500,
+                                            marker='*')  # Use a larger size (s), a different color (c), and a star marker
+                    highlight.append(h)
+
                 # Redraw the figure
                 canvas.draw()
             else:
@@ -73,7 +83,7 @@ def create_app():
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
                 # Extract the time from the time map
-                gen_time = time_map[gen_y_pixel, gen_x_pixel]
+                gen_time = [time_map[y, x, :time_counter[y, x]] for y, x in zip(gen_y_pixel, gen_x_pixel)]
 
                 # Clear the current figure
                 plt.clf()
@@ -106,9 +116,12 @@ def create_app():
 
                 # Add the time map heatmap
                 ax_time_map = fig.add_subplot(133)
-                cax2 = ax_time_map.imshow(time_map, cmap='viridis', interpolation='nearest', origin='lower')
+                first_times = time_map[:, :, 0]  # Extract the first time at each pixel
+                cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest',
+                                          origin='lower')  # Change this line
                 fig.colorbar(cax2, ax=ax_time_map)
                 ax_time_map.set_title('Time Map')
+
 
                 # Add the points to the time map heatmap
                 ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red',
@@ -116,7 +129,7 @@ def create_app():
 
                 # Add labels for these points
                 for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
-                    label = f'({x},{y},{t})'
+                    label = f'({x},{y})'
                     ax_time_map.annotate(label,  # this is the text
                                          (x, y),  # these are the coordinates to position the label
                                          textcoords="offset points",  # how to position the text
@@ -126,38 +139,42 @@ def create_app():
                 # Redraw the figure
                 canvas.draw()
 
-                # Clear the Listbox
-                listbox.delete(0, tk.END)
+                # Clear the treeview widget
+                treeview.delete(*treeview.get_children())
 
-                # Add the times and corresponding x, y points to the Listbox widget
-                for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
-                    item = f"X: {x}, Y: {y}, Time: {t}"
-                    listbox.insert(tk.END, item)  # Add each item to the end of the Listbox
+                # Add the times and corresponding x, y points to the Treeview widget
+                print(gen_time)
+
+                for x, y, times in zip(gen_x_pixel, gen_y_pixel, gen_time):
+                    times_str = ", ".join(str(t) for t in times)
+                    treeview.insert('', 'end', values=(x, y, times_str))
 
         # Determine the range of the original coordinates
         x_min, x_max = np.min(fit_x), np.max(fit_x)
         y_min, y_max = np.min(fit_y), np.max(fit_y)
-        # print length of x and y
-        print(len(fit_x))
-        print(len(fit_y))
 
         detector_width = int(np.ceil((x_max - x_min) / pixel_size))
         detector_height = int(np.ceil((y_max - y_min) / pixel_size))
 
         # Initialize the counts array
         counts = np.zeros((detector_height, detector_width))  # Note the reversed order
-        time_map = np.zeros((detector_height, detector_width))
+        max_times_per_pixel = 20
+        time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)
+        time_counter = np.zeros((detector_height, detector_width), dtype=int)
 
         # Count the number of fitted points at each pixel
         for i, (x, y) in enumerate(zip(fit_x, fit_y)):
             x_pixel = int(np.floor((x - x_min) / pixel_size))
             y_pixel = int(np.floor((y - y_min) / pixel_size))
-            counts[y_pixel, x_pixel] += 1  # Note the reversed order
-            time_map[y_pixel, x_pixel] = i  # Store the time
+            counts[y_pixel, x_pixel] += 1
+            time_map[y_pixel, x_pixel, time_counter[y_pixel, x_pixel]] = i
+            time_counter[y_pixel, x_pixel] += 1
 
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
+        image_window.grid_rowconfigure(0, weight=1)
+        image_window.grid_columnconfigure(0, weight=1)
 
         # Create a new figure
         fig = plt.figure(figsize=(18, 6))
@@ -190,23 +207,36 @@ def create_app():
 
         # Add the time map heatmap
         ax_time_map = fig.add_subplot(133)
-        cax2 = ax_time_map.imshow(time_map, cmap='viridis', interpolation='nearest', origin='lower')
+        first_times = time_map[:, :, 0]  # Extract the first time at each pixel
+        cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
         fig.colorbar(cax2, ax=ax_time_map)
         ax_time_map.set_title('Time Map')
 
+        # Add the canvas to the window
         canvas = FigureCanvasTkAgg(fig, master=image_window)
         canvas.draw()
-        canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
+        canvas.get_tk_widget().grid(row=0, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
 
         # Create the "Load Data" button
-        load_button = tk.Button(master=image_window, text="Load Data", command=load_data)
-        load_button.pack()
+        load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
+        load_button.grid(row=1, column=0, sticky='w', padx=200)
 
-        # Create the Listbox widget for displaying time values
-        listbox = tk.Listbox(master=image_window, width=50, height=20)
-        listbox.bind('<<ListboxSelect>>',
-                     on_listbox_select)  # Bind the selection event to the on_listbox_select function
-        listbox.pack()
+        # Create the Treeview widget for displaying time values
+        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time"), show="headings")
+
+        # Set the column headings and alignments
+        treeview.heading("X", text="X", anchor='center')
+        treeview.heading("Y", text="Y", anchor='center')
+        treeview.heading("Time", text="Time", anchor='center')
+
+        # Set the column alignments
+        treeview.column("X", anchor='center')
+        treeview.column("Y", anchor='center')
+        treeview.column("Time", anchor='center')
+
+        treeview.bind('<<TreeviewSelect>>',
+                      on_listbox_select)  # Bind the selection event to the on_listbox_select function
+        treeview.grid(row=2, column=0, columnspan=2, sticky='nsew', padx=150, pady=15)
 
     def display_parameters(original_params, fitted_params):
 
