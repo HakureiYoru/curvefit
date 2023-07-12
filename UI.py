@@ -15,10 +15,9 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
-
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.05):
         # Determine the range of the original coordinates
-        nonlocal image_window,  ax_time_map
+        nonlocal image_window, ax_time_map
         highlight = []
         gen_x_pixel = None
         gen_y_pixel = None
@@ -122,7 +121,6 @@ def create_app():
                 fig.colorbar(cax2, ax=ax_time_map)
                 ax_time_map.set_title('Time Map')
 
-
                 # Add the points to the time map heatmap
                 ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red',
                                     s=100)  # Use a larger size (s) and a different color for these points
@@ -143,11 +141,11 @@ def create_app():
                 treeview.delete(*treeview.get_children())
 
                 # Add the times and corresponding x, y points to the Treeview widget
-                print(gen_time)
-
-                for x, y, times in zip(gen_x_pixel, gen_y_pixel, gen_time):
-                    times_str = ", ".join(str(t) for t in times)
-                    treeview.insert('', 'end', values=(x, y, times_str))
+                with open('map_result.dat', 'w') as f:
+                    for x, y, times in zip(gen_x_pixel, gen_y_pixel, gen_time):
+                        times_str = ", ".join(str(t) for t in times)
+                        treeview.insert('', 'end', values=(x, y, times_str))  # Add each item to the end of the Treeview
+                        f.write(f"{x}, {y}, [{times_str}]\n")  # Write the result to the file
 
         # Determine the range of the original coordinates
         x_min, x_max = np.min(fit_x), np.max(fit_x)
@@ -173,6 +171,7 @@ def create_app():
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
+        image_window.geometry("800x600")  # Set the initial size of the window
         image_window.grid_rowconfigure(0, weight=1)
         image_window.grid_columnconfigure(0, weight=1)
 
@@ -620,6 +619,8 @@ def create_app():
     bounds_factor_dict = dict()
 
     app = tk.Tk()
+    app.title("Fitting Tool")
+    app.geometry("800x600")
 
     # Configure row and column weights
     for i in range(12):
