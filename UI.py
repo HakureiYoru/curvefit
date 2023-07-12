@@ -15,10 +15,11 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
-    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01):
+    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01,progress_callback=None):
         # Determine the range of the original coordinates
         nonlocal image_window, ax_time_map
         highlight = []
+        highlight_points = []
         gen_x_pixel = None
         gen_y_pixel = None
         gen_time = None
@@ -43,7 +44,7 @@ def create_app():
             selected = treeview.selection()
             if selected:  # If there is a selection
                 # Get the values of the selected row
-                x_str, y_str, t_str = treeview.item(selected, "values")
+                x_str, y_str, t_str, weight_str = treeview.item(selected, "values")
                 x = float(x_str)
                 y = float(y_str)
                 if t_str:  # Check if t_str is not empty
@@ -63,7 +64,13 @@ def create_app():
                 print("No selection")
 
         def load_data():
-            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight_points
+            # Remove the old points
+            if highlight_points:
+                for p in highlight_points:
+                    p.remove()
+                highlight_points = []
+
             file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
             if file_path:
                 df = pd.read_csv(file_path, header=None, sep=" ")
@@ -84,52 +91,14 @@ def create_app():
                 # Extract the time from the time map
                 gen_time = [time_map[y, x, :time_counter[y, x]] for y, x in zip(gen_y_pixel, gen_x_pixel)]
 
-                # Clear the current figure
-                plt.clf()
-
-                # Add the 3D subplot
-                ax_map = fig.add_subplot(141, projection='3d')  # Change this line
-
-                # Plot the surface
-                X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
-                ax_map.plot_surface(X, Y, counts, cmap='viridis')
-
-                # Plot the points where ntime = 1
-                mask_ntime_1 = counts == 1
-                ax_map.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
-
-                # Plot the points where ntime > 1
-                mask_ntime_gt_1 = counts > 1
-                ax_map.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
-
-                ax_map.set_title('Detector Time Map')
-                ax_map.set_xlabel('X')
-                ax_map.set_ylabel('Y')
-                ax_map.set_zlabel('N-times')
-
-                # Add the counts heatmap
-                ax_counts = fig.add_subplot(142)  # Change this line
-                cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
-                fig.colorbar(cax1, ax=ax_counts)
-                ax_counts.set_title('Counts')
-
-                # Add the weight map heatmap
-                ax_weight_map = fig.add_subplot(143)  # Add this line
-                cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
-                                            origin='lower')  # Add this line
-                fig.colorbar(cax3, ax=ax_weight_map)  # Add this line
-                ax_weight_map.set_title('Weight Map')  # Add this line
-
-                # Add the time map heatmap
-                ax_time_map = fig.add_subplot(144)  # Change this line
-                first_times = time_map[:, :, 0]  # Extract the first time at each pixel
-                cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
-                fig.colorbar(cax2, ax=ax_time_map)
-                ax_time_map.set_title('Time Map')
+                # Extract the weight from the weight map
+                gen_weight = [weight_map[y, x] for y, x in zip(gen_y_pixel, gen_x_pixel)]
 
                 # Add the points to the time map heatmap
                 ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red',
                                     s=100)  # Use a larger size (s) and a different color for these points
+
+                canvas.draw()
 
                 # Add labels for these points
                 for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
@@ -140,20 +109,18 @@ def create_app():
                                          xytext=(0, 10),  # distance from text to points (x,y)
                                          ha='center')  # horizontal alignment can be left, right or center
 
-                # Redraw the figure
-                canvas.draw()
-
                 # Clear the treeview widget
                 treeview.delete(*treeview.get_children())
 
-                # Add the times and corresponding x, y points to the Treeview widget
+                # Add the times, corresponding x, y points, and weights to the Treeview widget
                 with open('map_result.dat', 'w') as f:
-                    for x, y, times in zip(gen_x_pixel, gen_y_pixel, gen_time):
+                    for x, y, times, weight in zip(gen_x_pixel, gen_y_pixel, gen_time, gen_weight):
                         times_str = ", ".join(str(t) for t in times)
-                        treeview.insert('', 'end', values=(x, y, times_str))  # Add each item to the end of the Treeview
-                        f.write(f"{x}, {y}, [{times_str}]\n")  # Write the result to the file
+                        treeview.insert('', 'end',
+                                        values=(x, y, times_str, weight))  # Add each item to the end of the Treeview
+                        f.write(f"{x}, {y}, [{times_str}], {weight}\n")  # Write the result to the file
 
-        larger_map = 0.5  # see definition below
+        larger_map = 0.2  # see definition below
         max_times_per_pixel = 100
         delta_time = 10
 
@@ -163,6 +130,10 @@ def create_app():
 
         detector_width = int(np.ceil((x_max - x_min) / pixel_size))
         detector_height = int(np.ceil((y_max - y_min) / pixel_size))
+
+        # Determine the total number of pixels for Progress Bar
+        total_pixels = detector_width * detector_height
+        progress_increment = 50.0 / 1000  # The range of the progress bar for this function is from 50% to 100%
 
         # Initialize the counts array
         counts = np.zeros((detector_height, detector_width))  # Note the reversed order
@@ -176,8 +147,6 @@ def create_app():
             x_pixel = int(np.floor((x - x_min) / pixel_size))
             y_pixel = int(np.floor((y - y_min) / pixel_size))
             counts[y_pixel, x_pixel] += 1
-            # time_map[y_pixel, x_pixel, time_counter[y_pixel, x_pixel]] = i
-            # time_counter[y_pixel, x_pixel] += 1
 
             # Generate a Gaussian distribution centered at the current pixel and add it to the weight map
             y_grid, x_grid = np.mgrid[0:detector_height, 0:detector_width]
@@ -199,6 +168,8 @@ def create_app():
                             if time_counter[new_y_pixel, new_x_pixel] < max_times_per_pixel:
                                 time_map[new_y_pixel, new_x_pixel, time_counter[new_y_pixel, new_x_pixel]] = i
                                 time_counter[new_y_pixel, new_x_pixel] += 1
+            if progress_callback is not None:
+                progress_callback(increment=progress_increment)
 
         # Create a new window to display the image
         image_window = tk.Toplevel()
@@ -259,18 +230,20 @@ def create_app():
         load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
         load_button.grid(row=1, column=0, sticky='w', padx=200)
 
-        # Create the Treeview widget for displaying time values
-        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time"), show="headings")
+        # Create the Treeview widget for displaying time values and weights
+        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Weight"), show="headings")
 
         # Set the column headings and alignments
         treeview.heading("X", text="X", anchor='center')
         treeview.heading("Y", text="Y", anchor='center')
         treeview.heading("Time", text="Time", anchor='center')
+        treeview.heading("Weight", text="Weight", anchor='center')
 
         # Set the column alignments
         treeview.column("X", anchor='center')
         treeview.column("Y", anchor='center')
         treeview.column("Time", anchor='center')
+        treeview.column("Weight", anchor='center')
 
         treeview.bind('<<TreeviewSelect>>',
                       on_listbox_select)  # Bind the selection event to the on_listbox_select function
@@ -538,6 +511,10 @@ def create_app():
                 progress_increment = (progress_range[1] - progress_range[0]) / 50  # 假设我们有50步
                 progress_var.set(min(current_progress + progress_increment, progress_range[1]))
 
+            def progress_callback_2(increment):
+                current_progress = progress_var.get()
+                progress_var.set(min(current_progress + increment, 100))
+
             # Set the labelled text to the fitting process
             status_label.config(text="Fitting in progress...")
 
@@ -545,17 +522,10 @@ def create_app():
                                   progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
 
-            # Set label text to calculate time course
-            status_label.config(text="Calculating times...")
-
-            # Progress updates during simulation time calculations
-            for i in range(50, 101, 10):
-                time.sleep(0.2)  # Assuming each step takes some time
-                progress_var.set(i)
-
             status_label.config(text="Mapping...")
             # Create the detector time map
-            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"])
+            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"],
+                                        progress_callback=progress_callback_2)
 
             def update_ui():
                 display_parameters(params, fitted_params)
