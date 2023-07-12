@@ -80,9 +80,6 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     t_fit = np.linspace(0, 10, 1000)
     x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
-    # Estimate the time of generation for the observed x and y values
-    t_obs_est = estimate_time(x, y, x_fit, y_fit)  # Pass x_fit and y_fit to estimate_time
-
     # Note that this time is really just for end0.
     # And the role of end was supposed to be just to derive the result of the fit parameter.
     # There is no need to calculate the time.
@@ -95,7 +92,7 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     logger.info("------------")
     logger.info(f"Fitted x: {x_fit}")
     logger.info(f"Fitted y: {y_fit}")
-    logger.info(f"Estimated times: {t_obs_est}")
+
 
     # Save x_fit and y_fit to a JSON file
     output_data = {
@@ -109,23 +106,8 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
         "fitted_params": fitted_params.tolist(),
         "x_fit": x_fit.tolist(),
         "y_fit": y_fit.tolist(),
-        "time_fit": t_obs_est.tolist()
     }
 
 
-# Function to estimate the time of generation for each pair of observed x and y values
-def estimate_time(x_obs, y_obs, x_fit, y_fit):
-    t_obs_est = []
-    for x, y in zip(x_obs, y_obs):
-        distances = np.sqrt((x_fit - x) ** 2 + (y_fit - y) ** 2)
-        t_est = np.argmin(distances) / 100  # Because t_fit is np.linspace(0, 10, 1000)
-        t_obs_est.append(t_est)
 
-    # 将结果保存为 JSON
-    result = {
-        'estimated_times': t_obs_est
-    }
-    with open('result_time.json', 'w') as file:
-        json.dump(result, file)
 
-    return np.array(t_obs_est)

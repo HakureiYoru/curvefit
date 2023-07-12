@@ -15,7 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 def create_app():
-    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.05):
+    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01):
         # Determine the range of the original coordinates
         nonlocal image_window, ax_time_map
         highlight = []
@@ -88,7 +88,7 @@ def create_app():
                 plt.clf()
 
                 # Add the 3D subplot
-                ax_map = fig.add_subplot(131, projection='3d')
+                ax_map = fig.add_subplot(141, projection='3d')  # Change this line
 
                 # Plot the surface
                 X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
@@ -108,16 +108,22 @@ def create_app():
                 ax_map.set_zlabel('N-times')
 
                 # Add the counts heatmap
-                ax_counts = fig.add_subplot(132)
+                ax_counts = fig.add_subplot(142)  # Change this line
                 cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
                 fig.colorbar(cax1, ax=ax_counts)
                 ax_counts.set_title('Counts')
 
+                # Add the weight map heatmap
+                ax_weight_map = fig.add_subplot(143)  # Add this line
+                cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
+                                            origin='lower')  # Add this line
+                fig.colorbar(cax3, ax=ax_weight_map)  # Add this line
+                ax_weight_map.set_title('Weight Map')  # Add this line
+
                 # Add the time map heatmap
-                ax_time_map = fig.add_subplot(133)
+                ax_time_map = fig.add_subplot(144)  # Change this line
                 first_times = time_map[:, :, 0]  # Extract the first time at each pixel
-                cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest',
-                                          origin='lower')  # Change this line
+                cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
                 fig.colorbar(cax2, ax=ax_time_map)
                 ax_time_map.set_title('Time Map')
 
@@ -147,16 +153,21 @@ def create_app():
                         treeview.insert('', 'end', values=(x, y, times_str))  # Add each item to the end of the Treeview
                         f.write(f"{x}, {y}, [{times_str}]\n")  # Write the result to the file
 
+        larger_map = 0.5  # see definition below
+        max_times_per_pixel = 100
+        delta_time = 10
+
         # Determine the range of the original coordinates
-        x_min, x_max = np.min(fit_x), np.max(fit_x)
-        y_min, y_max = np.min(fit_y), np.max(fit_y)
+        x_min, x_max = np.min(fit_x) - larger_map, np.max(fit_x) + larger_map
+        y_min, y_max = np.min(fit_y) - larger_map, np.max(fit_y) + larger_map
 
         detector_width = int(np.ceil((x_max - x_min) / pixel_size))
         detector_height = int(np.ceil((y_max - y_min) / pixel_size))
 
         # Initialize the counts array
         counts = np.zeros((detector_height, detector_width))  # Note the reversed order
-        max_times_per_pixel = 20
+        weight_map = np.zeros((detector_height, detector_width))  # Add this line
+
         time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)
         time_counter = np.zeros((detector_height, detector_width), dtype=int)
 
@@ -165,8 +176,29 @@ def create_app():
             x_pixel = int(np.floor((x - x_min) / pixel_size))
             y_pixel = int(np.floor((y - y_min) / pixel_size))
             counts[y_pixel, x_pixel] += 1
-            time_map[y_pixel, x_pixel, time_counter[y_pixel, x_pixel]] = i
-            time_counter[y_pixel, x_pixel] += 1
+            # time_map[y_pixel, x_pixel, time_counter[y_pixel, x_pixel]] = i
+            # time_counter[y_pixel, x_pixel] += 1
+
+            # Generate a Gaussian distribution centered at the current pixel and add it to the weight map
+            y_grid, x_grid = np.mgrid[0:detector_height, 0:detector_width]
+            d = np.sqrt((x_pixel - x_grid) ** 2 + (y_pixel - y_grid) ** 2)
+            sigma, mu = 5.0, 0.0  # Define the standard deviation and mean of the Gaussian distribution
+            g = np.exp(-((d - mu) ** 2 / (2.0 * sigma ** 2)))
+            weight_map += g
+
+            # Check if the weight is above a threshold
+            if weight_map[y_pixel, x_pixel] > 1:
+                # Copy time information to additional pixels
+                for dx in range(-1, delta_time):
+                    for dy in range(-1, delta_time):
+                        new_x_pixel = x_pixel + dx
+                        new_y_pixel = y_pixel + dy
+
+                        # Check if the additional pixel is within the detector boundaries
+                        if new_x_pixel >= 0 and new_x_pixel < detector_width and new_y_pixel >= 0 and new_y_pixel < detector_height:
+                            if time_counter[new_y_pixel, new_x_pixel] < max_times_per_pixel:
+                                time_map[new_y_pixel, new_x_pixel, time_counter[new_y_pixel, new_x_pixel]] = i
+                                time_counter[new_y_pixel, new_x_pixel] += 1
 
         # Create a new window to display the image
         image_window = tk.Toplevel()
@@ -179,7 +211,7 @@ def create_app():
         fig = plt.figure(figsize=(18, 6))
 
         # Add the 3D subplot
-        ax_map = fig.add_subplot(131, projection='3d')
+        ax_map = fig.add_subplot(141, projection='3d')  # Change this line
 
         # Plot the surface
         X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
@@ -199,13 +231,20 @@ def create_app():
         ax_map.set_zlabel('N-times')
 
         # Add the counts heatmap
-        ax_counts = fig.add_subplot(132)
+        ax_counts = fig.add_subplot(142)  # Change this line
         cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
         fig.colorbar(cax1, ax=ax_counts)
         ax_counts.set_title('Counts')
 
+        # Add the weight map heatmap
+        ax_weight_map = fig.add_subplot(143)  # Add this line
+        cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
+                                    origin='lower')  # Add this line
+        fig.colorbar(cax3, ax=ax_weight_map)  # Add this line
+        ax_weight_map.set_title('Weight Map')  # Add this line
+
         # Add the time map heatmap
-        ax_time_map = fig.add_subplot(133)
+        ax_time_map = fig.add_subplot(144)  # Change this line
         first_times = time_map[:, :, 0]  # Extract the first time at each pixel
         cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
         fig.colorbar(cax2, ax=ax_time_map)
@@ -506,24 +545,19 @@ def create_app():
                                   progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
 
-            # 设置标签文本为计算时间过程
+            # Set label text to calculate time course
             status_label.config(text="Calculating times...")
 
-            estimated_times = fit_results["time_fit"]
-            time_diffs = np.diff(estimated_times)
-
-            # 模拟时间计算过程中的进度更新
+            # Progress updates during simulation time calculations
             for i in range(50, 101, 10):
-                time.sleep(0.2)  # 假设每步需要一些时间
+                time.sleep(0.2)  # Assuming each step takes some time
                 progress_var.set(i)
 
-            # 设置标签文本为完成状态
-            status_label.config(text="Completed")
+            status_label.config(text="Mapping...")
             # Create the detector time map
             create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"])
 
             def update_ui():
-                nonlocal time_window
                 display_parameters(params, fitted_params)
 
                 fit_x2 = fit_results["x_fit"]
@@ -545,27 +579,6 @@ def create_app():
                 canvas.draw()
 
                 progress_window.destroy()
-                if time_window is not None:
-                    time_window.destroy()
-
-                # Create a new window to display the estimated times and their differences
-                time_window = tk.Toplevel()
-                time_window.title("Estimated Times and Time Differences")
-
-                fig, axs = plt.subplots(2)
-                axs[0].scatter(range(len(estimated_times)), estimated_times)
-                axs[0].set_title('Estimated Times')
-                axs[0].set_xlabel('Index')
-                axs[0].set_ylabel('Time')
-
-                axs[1].plot(time_diffs)
-                axs[1].set_title('Time Differences')
-                axs[1].set_xlabel('Index')
-                axs[1].set_ylabel('Difference')
-
-                canvas1 = FigureCanvasTkAgg(fig, master=time_window)
-                canvas1.draw()
-                canvas1.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
             app.after(0, update_ui)
 
@@ -610,7 +623,6 @@ def create_app():
     params = None
     new_window = None
     param_window = None
-    time_window = None
     image_window = None
 
     ax_time_map = None  # Initialize ax_time_map
