@@ -16,7 +16,7 @@ from scipy.ndimage import distance_transform_edt
 
 
 def create_app():
-    def create_detector_time_map_ui(fit_x, fit_y, pixel_size=0.01, progress_callback=None):
+    def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
         # Determine the range of the original coordinates
         nonlocal image_window, ax_time_map
         highlight = []
@@ -96,19 +96,10 @@ def create_app():
                 gen_weight = [weight_map[y, x] for y, x in zip(gen_y_pixel, gen_x_pixel)]
 
                 # Add the points to the time map heatmap
-                ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red',
-                                    s=100)  # Use a larger size (s) and a different color for these points
+                points = ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red', s=100)
+                highlight_points.append(points)
 
                 canvas.draw()
-
-                # Add labels for these points
-                for x, y, t in zip(gen_x_pixel, gen_y_pixel, gen_time):
-                    label = f'({x},{y})'
-                    ax_time_map.annotate(label,  # this is the text
-                                         (x, y),  # these are the coordinates to position the label
-                                         textcoords="offset points",  # how to position the text
-                                         xytext=(0, 10),  # distance from text to points (x,y)
-                                         ha='center')  # horizontal alignment can be left, right or center
 
                 # Clear the treeview widget
                 treeview.delete(*treeview.get_children())
@@ -123,7 +114,6 @@ def create_app():
 
         larger_map = 0.2  # see definition below
         max_times_per_pixel = 100
-        delta_time = 5 # Time information detect range
         threshold = 0.1  # For  the weight map
 
         # Determine the range of the original coordinates
@@ -152,7 +142,6 @@ def create_app():
         dist = distance_transform_edt(1 - trajectory_image)
 
         # Compute the weight map from the distance transform
-        sigma = 20.0
         weight_map = np.exp(-dist / sigma)
 
         # Count the number of fitted points at each pixel
@@ -509,7 +498,7 @@ def create_app():
     def redraw_on_check():
         Fit()
 
-    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label):
+    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label,pixel_size, sigma, delta_time):
 
         try:
             def progress_callback(xk, convergence, progress_range=(0, 50)):
@@ -531,7 +520,7 @@ def create_app():
 
             status_label.config(text="Mapping...")
             # Create the detector time map
-            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"],
+            create_detector_time_map_ui(fit_results["x_fit"], fit_results["y_fit"], pixel_size, sigma, delta_time,
                                         progress_callback=progress_callback_2)
 
             def update_ui():
@@ -562,7 +551,7 @@ def create_app():
         except Exception as e:
             tk.messagebox.showerror("Error", str(e))
 
-    def Fit():
+    def Fit(pixel_size, sigma, delta_time):
         nonlocal gen_x, gen_y, params, filter_press_count, new_window
 
         if new_window is not None:
@@ -587,9 +576,63 @@ def create_app():
         # Start a new thread to run the time-consuming fitting operation
         fit_thread = threading.Thread(target=run_fit_in_thread,
                                       args=(gen_x, gen_y, params, filter_press_count, progress_var, progress_window,
-                                            status_label))
+                                            status_label,pixel_size, sigma, delta_time))
         fit_thread.daemon = True  # Set as a daemon thread so that when the main program exits the thread will also exit
         fit_thread.start()
+
+    def on_fit_button_clicked():
+        def validate_inputs(*args):
+            try:
+                pixel_size = float(pixel_size_var.get())
+                sigma = int(sigma_var.get())
+                delta_time = int(delta_time_var.get())
+
+                if 0.005 <= pixel_size <= 0.1 and 1 <= sigma <= 50 and 1 <= delta_time <= 15:
+                    confirm_button.config(state='normal')
+                else:
+                    confirm_button.config(state='disabled')
+            except ValueError:
+                confirm_button.config(state='disabled')
+
+        # Create a new window
+        settings_window = tk.Toplevel()
+        settings_window.title("Settings")
+
+        # Create variables
+        pixel_size_var = tk.StringVar(value="0.01")  # Default value
+        sigma_var = tk.StringVar(value="10")  # Default value
+        delta_time_var = tk.StringVar(value="5")  # Default value
+
+        # Create labels and text inputs
+        tk.Label(settings_window, text="Pixel Size (recommended: 0.005 to 0.1)").grid(row=0, column=0)
+        pixel_size_entry = tk.Entry(settings_window, textvariable=pixel_size_var)
+        pixel_size_entry.grid(row=0, column=1)
+        pixel_size_var.trace('w', validate_inputs)
+
+        tk.Label(settings_window, text="Sigma (recommended: 1 to 50)").grid(row=1, column=0)
+        sigma_entry = tk.Entry(settings_window, textvariable=sigma_var)
+        sigma_entry.grid(row=1, column=1)
+        sigma_var.trace('w', validate_inputs)
+
+        tk.Label(settings_window, text="Delta Time (recommended: 1 to 15)").grid(row=2, column=0)
+        delta_time_entry = tk.Entry(settings_window, textvariable=delta_time_var)
+        delta_time_entry.grid(row=2, column=1)
+        delta_time_var.trace('w', validate_inputs)
+
+        # Create a confirm button
+        confirm_button = tk.Button(settings_window, text="Confirm",
+                                   command=lambda: on_confirm_button_clicked(float(pixel_size_var.get()),
+                                                                             int(sigma_var.get()),
+                                                                             int(delta_time_var.get()),
+                                                                             settings_window))
+        confirm_button.grid(row=3, column=0, columnspan=2)
+        confirm_button.config(state='disabled')
+
+        validate_inputs()  # Initially validate the inputs
+
+    def on_confirm_button_clicked(pixel_size, sigma, delta_time, settings_window):
+        settings_window.destroy()
+        Fit(pixel_size, sigma, delta_time)
 
     # Initialize
     data_loaded = False
@@ -679,7 +722,7 @@ def create_app():
     buttons_frame = ttk.Frame(app)
     buttons_frame.grid(row=1, column=0, padx=10, pady=10, sticky='ew')
 
-    filter_button = ttk.Button(buttons_frame, text="Fit", command=Fit, state='disabled')
+    filter_button = ttk.Button(buttons_frame, text="Fit", command=on_fit_button_clicked, state='disabled')
     filter_button.pack(side='top', padx=10, pady=10, fill='x')
 
     load_button = ttk.Button(buttons_frame, text="Load Data & Parameters", command=load_file)
