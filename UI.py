@@ -10,9 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
-import time
 from mpl_toolkits.mplot3d import Axes3D
-from scipy.ndimage import distance_transform_edt
 
 
 def create_app():
@@ -112,61 +110,11 @@ def create_app():
                                         values=(x, y, times_str, weight))  # Add each item to the end of the Treeview
                         f.write(f"{x}, {y}, [{times_str}], {weight}\n")  # Write the result to the file
 
-        larger_map = 0.2  # see definition below
-        max_times_per_pixel = 100
-        threshold = 0.1  # For  the weight map
-
-        # Determine the range of the original coordinates
-        x_min, x_max = np.min(fit_x) - larger_map, np.max(fit_x) + larger_map
-        y_min, y_max = np.min(fit_y) - larger_map, np.max(fit_y) + larger_map
-
-        detector_width = int(np.ceil((x_max - x_min) / pixel_size))
-        detector_height = int(np.ceil((y_max - y_min) / pixel_size))
-
-        progress_increment = 50.0 / 1000  # The range of the progress bar for this function is from 50% to 100%
-
-        # Initialize the counts array
-        counts = np.zeros((detector_height, detector_width))  # Note the reversed order
-
-        time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)
-        time_counter = np.zeros((detector_height, detector_width), dtype=int)
-
-        # Create a binary image representing the trajectory
-        trajectory_image = np.zeros((detector_height, detector_width))
-        for x, y in zip(fit_x, fit_y):
-            x_pixel = int(np.floor((x - x_min) / pixel_size))
-            y_pixel = int(np.floor((y - y_min) / pixel_size))
-            trajectory_image[y_pixel, x_pixel] = 1
-
-        # Compute the distance transform
-        dist = distance_transform_edt(1 - trajectory_image)
-
-        # Compute the weight map from the distance transform
-        weight_map = np.exp(-dist / sigma)
-
-        # Count the number of fitted points at each pixel
-        for i, (x, y) in enumerate(zip(fit_x, fit_y)):
-            x_pixel = int(np.floor((x - x_min) / pixel_size))
-            y_pixel = int(np.floor((y - y_min) / pixel_size))
-            counts[y_pixel, x_pixel] += 1
-
-            # Check if the weight is above a threshold
-            if weight_map[y_pixel, x_pixel] > threshold * np.max(weight_map):
-                # Copy time information to additional pixels
-                for dx in range(-delta_time, delta_time + 1):
-                    for dy in range(-delta_time, delta_time + 1):
-                        new_x_pixel = x_pixel + dx
-                        new_y_pixel = y_pixel + dy
-
-                        # Check if the additional pixel is within the detector boundaries
-                        if 0 <= new_x_pixel < detector_width and 0 <= new_y_pixel < detector_height:
-                            if time_counter[new_y_pixel, new_x_pixel] < max_times_per_pixel:
-                                time_map[new_y_pixel, new_x_pixel, time_counter[new_y_pixel, new_x_pixel]] = i
-                                time_counter[new_y_pixel, new_x_pixel] += 1
-
-            if progress_callback is not None:
-                progress_callback(increment=progress_increment)
-
+        counts, time_map, weight_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(fit_x, fit_y,
+                                                                                                        pixel_size,
+                                                                                                        sigma,
+                                                                                                        delta_time,
+                                                                                                        progress_callback)
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
@@ -384,8 +332,6 @@ def create_app():
             p_x = analysis_results["gen_x_phases"]
             B_y = analysis_results["gen_y_amplitudes"]
             p_y = analysis_results["gen_y_phases"]
-            # f_x = analysis_results["gen_x_frequencies"]
-            # f_y = analysis_results["gen_y_frequencies"]
 
             # Process the data to find phase difference
             processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
@@ -407,12 +353,12 @@ def create_app():
                 'n': len(gen_x),
             }
 
-            # 为 gen_x 的每个分量动态添加A和p到params字典
+            # Dynamically add A and p to the params dictionary for each component of gen_x
             for i, (Ax, px) in enumerate(zip(A_x, p_x), 1):
                 params[f'A_x{i}'] = Ax
                 params[f'p_x{i}'] = px
 
-            # 为 gen_y 的每个分量动态添加A和p到params字典
+            # Dynamically add A and p to the params dictionary for each component of gen_y
             for i, (By, py) in enumerate(zip(B_y, p_y), 1):
                 params[f'B_y{i}'] = By
                 params[f'p_y{i}'] = py
@@ -494,11 +440,10 @@ def create_app():
             filter_button['state'] = 'normal'
             button_set_limit['state'] = 'normal'
 
-    # Checkbutton state change callback
-    def redraw_on_check():
-        Fit()
 
-    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label,pixel_size, sigma, delta_time):
+
+    def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label, pixel_size,
+                          sigma, delta_time):
 
         try:
             def progress_callback(xk, convergence, progress_range=(0, 50)):
@@ -530,17 +475,15 @@ def create_app():
                 fit_y2 = fit_results["y_fit"]
 
                 ax.clear()
-                if check_var1.get() == 1:
-                    draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
-                              scatter=True)
-                if check_var2.get() == 1:
-                    draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
-                    # 标记每过50个点的节点
-                    for i in range(0, len(fit_x2), 50):
-                        label = f'({fit_x2[i]:.2f}, {fit_y2[i]:.2f}, {i})'  # 标记文本包含了x、y和索引
-                        ax.annotate(label, (fit_x2[i], fit_y2[i]), xytext=(5, -10),
-                                    textcoords='offset points', ha='left', va='top')
-                        ax.plot(fit_x2[i], fit_y2[i], 'ro', markersize=5)  # 高亮标记的点为红色圆圈
+                draw_plot(ax, canvas, gen_x, gen_y, 'Original and Fitted Data', 'Original data', clear=False,
+                          scatter=True)
+                draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
+                # 标记每过50个点的节点
+                for i in range(0, len(fit_x2), 50):
+                    label = f'({fit_x2[i]:.2f}, {fit_y2[i]:.2f}, {i})'  # 标记文本包含了x、y和索引
+                    ax.annotate(label, (fit_x2[i], fit_y2[i]), xytext=(5, -10),
+                                textcoords='offset points', ha='left', va='top')
+                    ax.plot(fit_x2[i], fit_y2[i], 'ro', markersize=5)  # 高亮标记的点为红色圆圈
 
                 canvas.draw()
 
@@ -576,7 +519,7 @@ def create_app():
         # Start a new thread to run the time-consuming fitting operation
         fit_thread = threading.Thread(target=run_fit_in_thread,
                                       args=(gen_x, gen_y, params, filter_press_count, progress_var, progress_window,
-                                            status_label,pixel_size, sigma, delta_time))
+                                            status_label, pixel_size, sigma, delta_time))
         fit_thread.daemon = True  # Set as a daemon thread so that when the main program exits the thread will also exit
         fit_thread.start()
 
@@ -680,12 +623,6 @@ def create_app():
     checks_frame = ttk.Frame(app)
     checks_frame.grid(row=0, column=0, padx=10, pady=10, sticky='ew')
 
-    check_button1 = ttk.Checkbutton(checks_frame, text="Show Original Data", variable=check_var1)
-    check_button1.pack(side='top', padx=5, pady=5)
-
-    check_button2 = ttk.Checkbutton(checks_frame, text="Show Fitted Data", variable=check_var2)
-    check_button2.pack(side='top', padx=5, pady=5)
-
     auto_scale_checkbox = ttk.Checkbutton(checks_frame, text="Auto Scale", variable=auto_scale_var)
     auto_scale_checkbox.pack(side='top', padx=5, pady=5)
     auto_scale_var.trace('w', redraw_on_scale_change)
@@ -713,10 +650,6 @@ def create_app():
 
     parameters_status_label = ttk.Label(status_frame, text="Parameters: Not Loaded", background="red")
     parameters_status_label.pack(side="top", fill="x", expand=True, padx=5, pady=5)
-
-    # Attach the callback to the Checkbuttons
-    check_var1.trace('w', lambda *args: redraw_on_check())
-    check_var2.trace('w', lambda *args: redraw_on_check())
 
     # Buttons
     buttons_frame = ttk.Frame(app)

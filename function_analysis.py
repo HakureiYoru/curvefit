@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.ndimage import distance_transform_edt
 
 def xy_fft(gen_x, gen_y):
     # Fourier transform of gen_x
@@ -73,3 +73,61 @@ def keep_one_period(gen_x, gen_y):
 
     # Only keep one period of data
     return gen_x[:period], gen_y[:period]
+
+
+def calculate_map(fit_x, fit_y, pixel_size, sigma, delta_time,progress_callback):
+    larger_map = 0.2  # see definition below
+    max_times_per_pixel = 100
+    threshold = 0.1  # For  the weight map
+    # Determine the range of the original coordinates
+    x_min, x_max = np.min(fit_x) - larger_map, np.max(fit_x) + larger_map
+    y_min, y_max = np.min(fit_y) - larger_map, np.max(fit_y) + larger_map
+
+    detector_width = int(np.ceil((x_max - x_min) / pixel_size))
+    detector_height = int(np.ceil((y_max - y_min) / pixel_size))
+
+    progress_increment = 50.0 / 1000  # The range of the progress bar for this function is from 50% to 100%
+
+    # Initialize the counts array
+    counts = np.zeros((detector_height, detector_width))  # Note the reversed order
+
+    time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)
+    time_counter = np.zeros((detector_height, detector_width), dtype=int)
+
+    # Create a binary image representing the trajectory
+    trajectory_image = np.zeros((detector_height, detector_width))
+    for x, y in zip(fit_x, fit_y):
+        x_pixel = int(np.floor((x - x_min) / pixel_size))
+        y_pixel = int(np.floor((y - y_min) / pixel_size))
+        trajectory_image[y_pixel, x_pixel] = 1
+
+    # Compute the distance transform
+    dist = distance_transform_edt(1 - trajectory_image)
+
+    # Compute the weight map from the distance transform
+    weight_map = np.exp(-dist / sigma)
+
+    # Count the number of fitted points at each pixel
+    for i, (x, y) in enumerate(zip(fit_x, fit_y)):
+        x_pixel = int(np.floor((x - x_min) / pixel_size))
+        y_pixel = int(np.floor((y - y_min) / pixel_size))
+        counts[y_pixel, x_pixel] += 1
+
+        # Check if the weight is above a threshold
+        if weight_map[y_pixel, x_pixel] > threshold * np.max(weight_map):
+            # Copy time information to additional pixels
+            for dx in range(-delta_time, delta_time + 1):
+                for dy in range(-delta_time, delta_time + 1):
+                    new_x_pixel = x_pixel + dx
+                    new_y_pixel = y_pixel + dy
+
+                    # Check if the additional pixel is within the detector boundaries
+                    if 0 <= new_x_pixel < detector_width and 0 <= new_y_pixel < detector_height:
+                        if time_counter[new_y_pixel, new_x_pixel] < max_times_per_pixel:
+                            time_map[new_y_pixel, new_x_pixel, time_counter[new_y_pixel, new_x_pixel]] = i
+                            time_counter[new_y_pixel, new_x_pixel] += 1
+
+        if progress_callback is not None:
+            progress_callback(increment=progress_increment)
+
+    return counts, time_map, weight_map, detector_width, detector_height, time_counter, x_min, y_min
