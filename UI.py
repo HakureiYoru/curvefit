@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import function_analysis
 import threading
 from mpl_toolkits.mplot3d import Axes3D
-
+from matplotlib.animation import FuncAnimation
 
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
@@ -43,7 +43,7 @@ def create_app():
             selected = treeview.selection()
             if selected:  # If there is a selection
                 # Get the values of the selected row
-                x_str, y_str, t_str, weight_str = treeview.item(selected, "values")
+                x_str, y_str, t_str, weight_str, weight_time_str = treeview.item(selected, "values")
                 x = float(x_str)
                 y = float(y_str)
                 if t_str:  # Check if t_str is not empty
@@ -87,11 +87,23 @@ def create_app():
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
-                # Extract the time from the time map
-                gen_time = [time_map[y, x, :time_counter[y, x]] for y, x in zip(gen_y_pixel, gen_x_pixel)]
+                # Extract the time and weight from the time map and weight time map, and only keep the top 3 times with the highest weights
+                # But if the maximum weight is less than a certain threshold, keep all times and weights
+                gen_time_and_weight = [(time_map[y, x, :time_counter[y, x]], weight_time_map[y, x, :time_counter[y, x]])
+                                       for y, x in zip(gen_y_pixel, gen_x_pixel)]
+                gen_time_and_weight = [sorted(zip(times, weights), key=lambda tw: tw[1], reverse=True)[:4] if max(
+                    weights) >= 0.001 else list(zip(times, weights)) for times, weights in gen_time_and_weight]
+                gen_time, gen_weight = zip(
+                    *[[list(tw) for tw in zip(*tws)] for tws in gen_time_and_weight])  # Unzip the time and weight
 
-                # Extract the weight from the weight map
-                gen_weight = [weight_map[y, x] for y, x in zip(gen_y_pixel, gen_x_pixel)]
+                # Convert the times and weights to strings and limit to 3 decimal places
+                gen_time_str = [", ".join(f"{t:.0f}" for t in times) for times in gen_time]
+                gen_weight_str = [", ".join(f"{w:.3f}" for w in weights) for weights in gen_weight]
+
+                position_weight = [weight_map[y, x] for y, x in zip(gen_y_pixel, gen_x_pixel)]
+
+                # Convert the weights to strings and limit to 3 decimal places
+                position_weight_str = [f"{w:.3f}" for w in position_weight]
 
                 # Add the points to the time map heatmap
                 points = ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red', s=100)
@@ -104,13 +116,14 @@ def create_app():
 
                 # Add the times, corresponding x, y points, and weights to the Treeview widget
                 with open('map_result.dat', 'w') as f:
-                    for x, y, times, weight in zip(gen_x_pixel, gen_y_pixel, gen_time, gen_weight):
-                        times_str = ", ".join(str(t) for t in times)
+                    for x, y, times, weight, position in zip(gen_x_pixel, gen_y_pixel, gen_time_str, gen_weight_str,
+                                                             position_weight_str):
                         treeview.insert('', 'end',
-                                        values=(x, y, times_str, weight))  # Add each item to the end of the Treeview
-                        f.write(f"{x}, {y}, [{times_str}], {weight}\n")  # Write the result to the file
+                                        values=(
+                                        x, y, times, weight, position))  # Add each item to the end of the Treeview
+                        f.write(f"{x}, {y}, [{times}], {weight}, {position}\n")  # Write the result to the file
 
-        counts, time_map, weight_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(fit_x, fit_y,
+        counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(fit_x, fit_y,
                                                                                                         pixel_size,
                                                                                                         sigma,
                                                                                                         delta_time,
@@ -126,7 +139,7 @@ def create_app():
         fig = plt.figure(figsize=(18, 6))
 
         # Add the 3D subplot
-        ax_map = fig.add_subplot(141, projection='3d')  # Change this line
+        ax_map = fig.add_subplot(131, projection='3d')  # Change this line
 
         # Plot the surface
         X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
@@ -145,21 +158,22 @@ def create_app():
         ax_map.set_ylabel('Y')
         ax_map.set_zlabel('N-times')
 
-        # Add the counts heatmap
-        ax_counts = fig.add_subplot(142)  # Change this line
-        cax1 = ax_counts.imshow(counts, cmap='viridis', interpolation='nearest', origin='lower')
-        fig.colorbar(cax1, ax=ax_counts)
-        ax_counts.set_title('Counts')
+        # # Add the weight_time_map heatmap
+        # ax_weight_time_map = fig.add_subplot(142)
+        # cax1 = ax_weight_time_map.imshow(weight_time_map.max(axis=2), cmap='viridis', interpolation='nearest',
+        #                                  origin='lower')
+        # fig.colorbar(cax1, ax=ax_weight_time_map)
+        # ax_weight_time_map.set_title('Max Weight Time Map')
 
         # Add the weight map heatmap
-        ax_weight_map = fig.add_subplot(143)  # Add this line
+        ax_weight_map = fig.add_subplot(132)  # Add this line
         cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
                                     origin='lower')  # Add this line
         fig.colorbar(cax3, ax=ax_weight_map)  # Add this line
         ax_weight_map.set_title('Weight Map')  # Add this line
 
         # Add the time map heatmap
-        ax_time_map = fig.add_subplot(144)  # Change this line
+        ax_time_map = fig.add_subplot(133)  # Change this line
         first_times = time_map[:, :, 0]  # Extract the first time at each pixel
         cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
         fig.colorbar(cax2, ax=ax_time_map)
@@ -175,19 +189,21 @@ def create_app():
         load_button.grid(row=1, column=0, sticky='w', padx=200)
 
         # Create the Treeview widget for displaying time values and weights
-        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Weight"), show="headings")
+        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"), show="headings")
 
         # Set the column headings and alignments
         treeview.heading("X", text="X", anchor='center')
         treeview.heading("Y", text="Y", anchor='center')
         treeview.heading("Time", text="Time", anchor='center')
-        treeview.heading("Weight", text="Weight", anchor='center')
+        treeview.heading("Time Weight", text="Time Weight", anchor='center')
+        treeview.heading("Position Weight", text="Position Weight", anchor='center')
 
         # Set the column alignments
         treeview.column("X", anchor='center')
         treeview.column("Y", anchor='center')
         treeview.column("Time", anchor='center')
-        treeview.column("Weight", anchor='center')
+        treeview.column("Time Weight", anchor='center')
+        treeview.column("Position Weight", anchor='center')
 
         treeview.bind('<<TreeviewSelect>>',
                       on_listbox_select)  # Bind the selection event to the on_listbox_select function
@@ -615,9 +631,6 @@ def create_app():
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.get_tk_widget().pack(fill='both', expand=True)
 
-    # Check buttons
-    check_var1 = tk.IntVar(value=1)  # set initial to true
-    check_var2 = tk.IntVar(value=1)
     auto_scale_var = tk.IntVar()
 
     checks_frame = ttk.Frame(app)

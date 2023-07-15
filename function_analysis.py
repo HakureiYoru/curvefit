@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 
+
 def xy_fft(gen_x, gen_y):
     # Fourier transform of gen_x
     ft_gen_x = np.fft.rfft(gen_x)
@@ -75,7 +76,7 @@ def keep_one_period(gen_x, gen_y):
     return gen_x[:period], gen_y[:period]
 
 
-def calculate_map(fit_x, fit_y, pixel_size, sigma, delta_time,progress_callback):
+def calculate_map(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback):
     larger_map = 0.2  # see definition below
     max_times_per_pixel = 100
     threshold = 0.1  # For  the weight map
@@ -92,6 +93,7 @@ def calculate_map(fit_x, fit_y, pixel_size, sigma, delta_time,progress_callback)
     counts = np.zeros((detector_height, detector_width))  # Note the reversed order
 
     time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)
+    weight_time_map = np.full((detector_height, detector_width, max_times_per_pixel), np.nan)  # Add this line
     time_counter = np.zeros((detector_height, detector_width), dtype=int)
 
     # Create a binary image representing the trajectory
@@ -125,9 +127,22 @@ def calculate_map(fit_x, fit_y, pixel_size, sigma, delta_time,progress_callback)
                     if 0 <= new_x_pixel < detector_width and 0 <= new_y_pixel < detector_height:
                         if time_counter[new_y_pixel, new_x_pixel] < max_times_per_pixel:
                             time_map[new_y_pixel, new_x_pixel, time_counter[new_y_pixel, new_x_pixel]] = i
+                              # Use the weight of the new pixel
                             time_counter[new_y_pixel, new_x_pixel] += 1
 
         if progress_callback is not None:
             progress_callback(increment=progress_increment)
 
-    return counts, time_map, weight_map, detector_width, detector_height, time_counter, x_min, y_min
+    # After all other calculations
+    for y_pixel in range(detector_height):
+        for x_pixel in range(detector_width):
+            # Check if there are any non-nan values
+            if not np.isnan(time_map[y_pixel, x_pixel]).all():
+                # Calculate the real time of the particle in this pixel
+                real_time = np.nanmean(time_map[y_pixel, x_pixel])
+
+                # Calculate the weights for each timestamp
+                time_diff = time_map[y_pixel, x_pixel] - real_time
+                weight_time_map[y_pixel, x_pixel] = np.exp(-time_diff ** 2 / (2 * sigma ** 2))
+
+    return counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min
