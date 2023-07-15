@@ -123,6 +123,57 @@ def create_app():
                                         x, y, times, weight, position))  # Add each item to the end of the Treeview
                         f.write(f"{x}, {y}, [{times}], {weight}, {position}\n")  # Write the result to the file
 
+        def create_stacked_area_plot(x_pixel, y_pixel):
+            # Get the weights and times for this pixel
+            weights = weight_time_map[y_pixel, x_pixel, :]
+            times = time_map[y_pixel, x_pixel, :len(weights)]
+
+            # Check if the pixel is on the function trajectory
+            if np.all(weights == 0):
+                # The pixel is not on the function trajectory
+                messagebox.showinfo("Info", "The selected pixel is not on the function trajectory.")
+                return
+
+            # Check if the weights array contains valid values
+            if np.isnan(weights).all() or np.isinf(weights).all() or len(weights) == 0:
+                # The weights array does not contain valid values
+                messagebox.showinfo("Info", "The selected pixel does not have valid weights.")
+                return
+
+            # Create the new window
+            plot_window = tk.Toplevel()
+            plot_window.title("Stacked Area Plot")
+            plot_window.geometry("600x400")  # Set the initial size of the window
+
+            # Add the pixel label
+            pixel_label = tk.Label(master=plot_window, text=f"Pixel: ({x_pixel}, {y_pixel})")
+            pixel_label.pack()
+
+            # Create the new figure
+            fig, ax = plt.subplots()
+
+            # Create the stacked area plot
+            ax.fill_between(times, weights, color='b', alpha=0.5)
+
+            # Set the y-axis limit
+            min_weight = weights.min() if not np.isnan(weights.min()) else 0
+            max_weight = weights.max() if not np.isnan(weights.max()) else 1
+            print(max_weight, min_weight)
+            ax.set_ylim([min_weight - 0.05, max_weight + 0.05])  # Added the delta to the min and max weights
+
+            # Add the canvas to the window
+            canvas = FigureCanvasTkAgg(fig, master=plot_window)
+            canvas.draw()
+            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        def on_pixel_click(event):
+            # Get the coordinates of the clicked pixel
+            x_pixel = int(event.xdata)
+            y_pixel = int(event.ydata)
+
+            # Create the stacked area plot for this pixel
+            create_stacked_area_plot(x_pixel, y_pixel)
+
         counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(fit_x, fit_y,
                                                                                                         pixel_size,
                                                                                                         sigma,
@@ -166,14 +217,15 @@ def create_app():
         # ax_weight_time_map.set_title('Max Weight Time Map')
 
         # Add the weight map heatmap
-        ax_weight_map = fig.add_subplot(132)  # Add this line
+        ax_weight_map = fig.add_subplot(132)
         cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
-                                    origin='lower')  # Add this line
-        fig.colorbar(cax3, ax=ax_weight_map)  # Add this line
-        ax_weight_map.set_title('Weight Map')  # Add this line
+                                    origin='lower')
+        fig.colorbar(cax3, ax=ax_weight_map)
+        ax_weight_map.set_title('Weight Map')
+        ax_weight_map.set_xlabel('Click on the pixel to see its time weight')
 
         # Add the time map heatmap
-        ax_time_map = fig.add_subplot(133)  # Change this line
+        ax_time_map = fig.add_subplot(133)
         first_times = time_map[:, :, 0]  # Extract the first time at each pixel
         cax2 = ax_time_map.imshow(first_times, cmap='viridis', interpolation='nearest', origin='lower')
         fig.colorbar(cax2, ax=ax_time_map)
@@ -183,6 +235,9 @@ def create_app():
         canvas = FigureCanvasTkAgg(fig, master=image_window)
         canvas.draw()
         canvas.get_tk_widget().grid(row=0, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
+
+        # Bind the mouse click event to the on_pixel_click function
+        canvas.mpl_connect('button_press_event', on_pixel_click)
 
         # Create the "Load Data" button
         load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
@@ -496,10 +551,10 @@ def create_app():
                 draw_plot(ax, canvas, fit_x2, fit_y2, 'New Data', 'Filtered data', clear=False, scatter=False)
                 # 标记每过50个点的节点
                 for i in range(0, len(fit_x2), 50):
-                    label = f'({fit_x2[i]:.2f}, {fit_y2[i]:.2f}, {i})'  # 标记文本包含了x、y和索引
+                    label = f'({fit_x2[i]:.2f}, {fit_y2[i]:.2f}, {i})'
                     ax.annotate(label, (fit_x2[i], fit_y2[i]), xytext=(5, -10),
                                 textcoords='offset points', ha='left', va='top')
-                    ax.plot(fit_x2[i], fit_y2[i], 'ro', markersize=5)  # 高亮标记的点为红色圆圈
+                    ax.plot(fit_x2[i], fit_y2[i], 'ro', markersize=5)  # Highlighted points are red circles
 
                 canvas.draw()
 
@@ -521,11 +576,9 @@ def create_app():
         progress_window = tk.Toplevel()
         progress_window.title("Fitting Progress")
 
-        # 创建一个变量来存储进度值
         progress_var = tk.DoubleVar()
         progress_var.set(0)
 
-        # 创建一个标签来显示状态信息
         status_label = tk.Label(progress_window, text="Initializing...", font=("Arial", 12))
         status_label.pack()
 
@@ -559,7 +612,7 @@ def create_app():
 
         # Create variables
         pixel_size_var = tk.StringVar(value="0.01")  # Default value
-        sigma_var = tk.StringVar(value="10")  # Default value
+        sigma_var = tk.StringVar(value="1")  # Default value
         delta_time_var = tk.StringVar(value="5")  # Default value
 
         # Create labels and text inputs
