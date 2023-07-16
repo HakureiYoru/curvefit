@@ -13,6 +13,7 @@ import threading
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 
+
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
         # Determine the range of the original coordinates
@@ -27,7 +28,7 @@ def create_app():
             image_window.destroy()
 
         def on_listbox_select(event):
-            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window
 
             # Check if the variables have been initialized
             if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
@@ -44,8 +45,8 @@ def create_app():
             if selected:  # If there is a selection
                 # Get the values of the selected row
                 x_str, y_str, t_str, weight_str, weight_time_str = treeview.item(selected, "values")
-                x = float(x_str)
-                y = float(y_str)
+                x = int(x_str)
+                y = int(y_str)
                 if t_str:  # Check if t_str is not empty
                     t_values = list(map(float, t_str.split(', ')))
                 else:
@@ -54,11 +55,36 @@ def create_app():
                 # Highlight the selected point
                 for t in t_values:
                     h = ax_time_map.scatter(x, y, c='magenta', s=500,
-                                            marker='*')  # Use a larger size (s), a different color (c), and a star marker
+                                            marker='*')
+                    # Use a larger size (s), a different color (c), and a star marker
                     highlight.append(h)
 
-                # Redraw the figure
-                canvas.draw()
+                # Destroy the previous zoom window if it exists
+                if zoom_window is not None:
+                    zoom_window.destroy()
+
+                # Create a new window to display the zoomed view
+                zoom_window = tk.Toplevel()
+                zoom_window.title("Zoomed View")
+                zoom_window.geometry("600x400")  # Set the initial size of the window
+
+                # Create the new figure
+                fig_zoom, ax_zoom = plt.subplots()
+
+                # Plot the time map heatmap
+                zoom_size = 20  # Change the size as needed
+                zoomed_first_times = first_times[max(0, y - zoom_size):min(first_times.shape[0], y + zoom_size),
+                                     max(0, x - zoom_size):min(first_times.shape[1], x + zoom_size)]
+                ax_zoom.imshow(zoomed_first_times, cmap='viridis', interpolation='nearest', origin='lower')
+
+                # Highlight the selected point
+                ax_zoom.scatter(zoom_size, zoom_size, c='red')
+
+                # Add the canvas to the window
+                canvas_zoom = FigureCanvasTkAgg(fig_zoom, master=zoom_window)
+                canvas_zoom.draw()
+                canvas_zoom.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
             else:
                 print("No selection")
 
@@ -77,22 +103,29 @@ def create_app():
 
                 f2, f1, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for
                                             val in parameters_data.values]  # to remove "#" before f1
-                gen_x, gen_y = data[0].values.astype(float), data[1].values.astype(float)
+                gen_x_map, gen_y_map = data[0].values.astype(float), data[1].values.astype(float)
+
+                # Get the current choice from the dropdown menu
+                choice = current_choice.get()
 
                 # Calculate the pixel coordinates of the newly loaded data
-                gen_x_pixel = np.floor((gen_x - x_min) / pixel_size).astype(int)
-                gen_y_pixel = np.floor((gen_y - y_min) / pixel_size).astype(int)
+                gen_x_pixel = np.floor((gen_x_map - x_min) / pixel_size).astype(int)
+                gen_y_pixel = np.floor((gen_y_map - y_min) / pixel_size).astype(int)
 
                 # Ensure that the pixel coordinates are within the valid range
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
-                # Extract the time and weight from the time map and weight time map, and only keep the top 3 times with the highest weights
-                # But if the maximum weight is less than a certain threshold, keep all times and weights
+                # Extract the time and weight from the time map and weight time map, and only keep the top 3 times
+                # with the highest weights But if the maximum weight is less than a certain threshold, keep all times
+                # and weights
                 gen_time_and_weight = [(time_map[y, x, :time_counter[y, x]], weight_time_map[y, x, :time_counter[y, x]])
                                        for y, x in zip(gen_y_pixel, gen_x_pixel)]
-                gen_time_and_weight = [sorted(zip(times, weights), key=lambda tw: tw[1], reverse=True)[:4] if max(
-                    weights) >= 0.001 else list(zip(times, weights)) for times, weights in gen_time_and_weight]
+                if choice == "show top 3 weight":
+                    gen_time_and_weight = [sorted(zip(times, weights), key=lambda tw: tw[1], reverse=True)[:3]
+                                           for times, weights in gen_time_and_weight if max(weights) >= 0.001]
+                else:
+                    gen_time_and_weight = [list(zip(times, weights)) for times, weights in gen_time_and_weight]
                 gen_time, gen_weight = zip(
                     *[[list(tw) for tw in zip(*tws)] for tws in gen_time_and_weight])  # Unzip the time and weight
 
@@ -106,7 +139,7 @@ def create_app():
                 position_weight_str = [f"{w:.3f}" for w in position_weight]
 
                 # Add the points to the time map heatmap
-                points = ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red', s=100)
+                points = ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red', s=40)
                 highlight_points.append(points)
 
                 canvas.draw()
@@ -120,7 +153,7 @@ def create_app():
                                                              position_weight_str):
                         treeview.insert('', 'end',
                                         values=(
-                                        x, y, times, weight, position))  # Add each item to the end of the Treeview
+                                            x, y, times, weight, position))  # Add each item to the end of the Treeview
                         f.write(f"{x}, {y}, [{times}], {weight}, {position}\n")  # Write the result to the file
 
         def create_stacked_area_plot(x_pixel, y_pixel):
@@ -150,23 +183,27 @@ def create_app():
             pixel_label.pack()
 
             # Create the new figure
-            fig, ax = plt.subplots()
+            fig_map, ax_map = plt.subplots()
 
             # Create the stacked area plot
-            ax.fill_between(times, weights, color='b', alpha=0.5)
+            ax_map.fill_between(times, weights, color='b', alpha=0.5)
 
             # Set the y-axis limit
             min_weight = weights.min() if not np.isnan(weights.min()) else 0
             max_weight = weights.max() if not np.isnan(weights.max()) else 1
             print(max_weight, min_weight)
-            ax.set_ylim([min_weight - 0.05, max_weight + 0.05])  # Added the delta to the min and max weights
+            ax_map.set_ylim([min_weight - 0.05, max_weight + 0.05])  # Added the delta to the min and max weights
 
             # Add the canvas to the window
-            canvas = FigureCanvasTkAgg(fig, master=plot_window)
-            canvas.draw()
-            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+            canvas_map = FigureCanvasTkAgg(fig_map, master=plot_window)
+            canvas_map.draw()
+            canvas_map.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         def on_pixel_click(event):
+            # Check if the click is within the image bounds
+            if event.xdata is None or event.ydata is None:
+                return
+
             # Get the coordinates of the clicked pixel
             x_pixel = int(event.xdata)
             y_pixel = int(event.ydata)
@@ -174,11 +211,12 @@ def create_app():
             # Create the stacked area plot for this pixel
             create_stacked_area_plot(x_pixel, y_pixel)
 
-        counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(fit_x, fit_y,
-                                                                                                        pixel_size,
-                                                                                                        sigma,
-                                                                                                        delta_time,
-                                                                                                        progress_callback)
+        counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(
+            fit_x, fit_y,
+            pixel_size,
+            sigma,
+            delta_time,
+            progress_callback)
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
@@ -209,13 +247,6 @@ def create_app():
         ax_map.set_ylabel('Y')
         ax_map.set_zlabel('N-times')
 
-        # # Add the weight_time_map heatmap
-        # ax_weight_time_map = fig.add_subplot(142)
-        # cax1 = ax_weight_time_map.imshow(weight_time_map.max(axis=2), cmap='viridis', interpolation='nearest',
-        #                                  origin='lower')
-        # fig.colorbar(cax1, ax=ax_weight_time_map)
-        # ax_weight_time_map.set_title('Max Weight Time Map')
-
         # Add the weight map heatmap
         ax_weight_map = fig.add_subplot(132)
         cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
@@ -244,7 +275,8 @@ def create_app():
         load_button.grid(row=1, column=0, sticky='w', padx=200)
 
         # Create the Treeview widget for displaying time values and weights
-        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"), show="headings")
+        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
+                                show="headings")
 
         # Set the column headings and alignments
         treeview.heading("X", text="X", anchor='center')
@@ -263,6 +295,16 @@ def create_app():
         treeview.bind('<<TreeviewSelect>>',
                       on_listbox_select)  # Bind the selection event to the on_listbox_select function
         treeview.grid(row=2, column=0, columnspan=2, sticky='nsew', padx=150, pady=15)
+
+        # Create the variable to store the current choice
+        current_choice = tk.StringVar()
+
+        # Set the default value
+        current_choice.set("show all time")
+
+        # Create the dropdown menu
+        dropdown = tk.OptionMenu(image_window, current_choice, "show all time", "show top 3 weight")
+        dropdown.grid(row=1, column=1, sticky='w', padx=150)
 
     def display_parameters(original_params, fitted_params):
 
@@ -474,7 +516,7 @@ def create_app():
             plot_frame = tk.Frame(xy_window)
             plot_frame.pack(side="right", padx=10, pady=10, expand=True, fill=tk.BOTH)
 
-            fig, axs = plt.subplots(2, 1, figsize=(6, 6))
+            fig_load, axs = plt.subplots(2, 1, figsize=(6, 6))
 
             axs[0].plot(gen_x, label='gen_x')
             axs[0].set_title('gen_x')
@@ -490,7 +532,7 @@ def create_app():
 
             plt.tight_layout()
 
-            canvas_plot = FigureCanvasTkAgg(fig, master=plot_frame)
+            canvas_plot = FigureCanvasTkAgg(fig_load, master=plot_frame)
             canvas_plot.draw()
             canvas_plot.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
@@ -510,8 +552,6 @@ def create_app():
         if data_loaded and parameters_loaded:
             filter_button['state'] = 'normal'
             button_set_limit['state'] = 'normal'
-
-
 
     def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label, pixel_size,
                           sigma, delta_time):
@@ -656,6 +696,7 @@ def create_app():
     new_window = None
     param_window = None
     image_window = None
+    zoom_window = None
 
     ax_time_map = None  # Initialize ax_time_map
     # Initial value 0.05
