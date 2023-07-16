@@ -23,12 +23,12 @@ def create_app():
         gen_x_pixel = None
         gen_y_pixel = None
         gen_time = None
-
+        zoomed_circle = None
         if image_window is not None:
             image_window.destroy()
 
         def on_listbox_select(event):
-            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
 
             # Check if the variables have been initialized
             if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
@@ -52,13 +52,6 @@ def create_app():
                 else:
                     t_values = [0]
 
-                # Highlight the selected point
-                for t in t_values:
-                    h = ax_time_map.scatter(x, y, c='magenta', s=500,
-                                            marker='*')
-                    # Use a larger size (s), a different color (c), and a star marker
-                    highlight.append(h)
-
                 # Destroy the previous zoom window if it exists
                 if zoom_window is not None:
                     zoom_window.destroy()
@@ -72,6 +65,7 @@ def create_app():
                 fig_zoom, ax_zoom = plt.subplots()
 
                 # Plot the time map heatmap
+
                 zoom_size = 20  # Change the size as needed
                 zoomed_first_times = first_times[max(0, y - zoom_size):min(first_times.shape[0], y + zoom_size),
                                      max(0, x - zoom_size):min(first_times.shape[1], x + zoom_size)]
@@ -80,10 +74,26 @@ def create_app():
                 # Highlight the selected point
                 ax_zoom.scatter(zoom_size, zoom_size, c='red')
 
+                # Highlight the selected point
+                for t in t_values:
+                    h = ax_time_map.scatter(x, y, c='magenta', s=200, marker='*')
+                    highlight.append(h)
+
+                # Remove the previous circle if it exists
+                if zoomed_circle is not None:
+                    zoomed_circle.remove()
+
+                # Draw a circle around the zoomed area
+                zoomed_circle = plt.Circle((x, y), zoom_size+10, fill=False, color='red', linestyle='dashed')
+                ax_time_map.add_patch(zoomed_circle)
+
                 # Add the canvas to the window
                 canvas_zoom = FigureCanvasTkAgg(fig_zoom, master=zoom_window)
                 canvas_zoom.draw()
                 canvas_zoom.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+                # Redraw the figure
+                canvas.draw()
+
 
             else:
                 print("No selection")
