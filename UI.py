@@ -126,18 +126,21 @@ def create_app():
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
-                # Extract the time and weight from the time map and weight time map, and only keep the top 3 times
-                # with the highest weights But if the maximum weight is less than a certain threshold, keep all times
-                # and weights
-                gen_time_and_weight = [(time_map[y, x, :time_counter[y, x]], weight_time_map[y, x, :time_counter[y, x]])
-                                       for y, x in zip(gen_y_pixel, gen_x_pixel)]
-                if choice == "show top 3 weight":
-                    gen_time_and_weight = [sorted(zip(times, weights), key=lambda tw: tw[1], reverse=True)[:3]
-                                           for times, weights in gen_time_and_weight if max(weights) >= 0.001]
+                gen_time_and_weight = []
+                for y, x in zip(gen_y_pixel, gen_x_pixel):
+                    times = time_map[y, x, :time_counter[y, x]]
+                    weights = weight_time_map[y, x, :time_counter[y, x]]
+                    if not np.isnan(weights).all():
+                        if choice == "show top 3 weight" and max(weights) >= 0.001:
+                            gen_time_and_weight.append(
+                                sorted(zip(times, weights), key=lambda tw: tw[1], reverse=True)[:3])
+                        else:
+                            gen_time_and_weight.append(list(zip(times, weights)))
+
+                if gen_time_and_weight:
+                    gen_time, gen_weight = zip(*[[list(tw) for tw in zip(*tws)] for tws in gen_time_and_weight])
                 else:
-                    gen_time_and_weight = [list(zip(times, weights)) for times, weights in gen_time_and_weight]
-                gen_time, gen_weight = zip(
-                    *[[list(tw) for tw in zip(*tws)] for tws in gen_time_and_weight])  # Unzip the time and weight
+                    gen_time, gen_weight = [], []
 
                 # Convert the times and weights to strings and limit to 3 decimal places
                 gen_time_str = [", ".join(f"{t:.0f}" for t in times) for times in gen_time]
