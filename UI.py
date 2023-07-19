@@ -12,6 +12,8 @@ import function_analysis
 import threading
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
+from sklearn.cluster import DBSCAN
+from scipy.stats import norm
 
 
 def create_app():
@@ -26,6 +28,36 @@ def create_app():
         zoomed_circle = None
         if image_window is not None:
             image_window.destroy()
+
+        def calculate_trace():
+            nonlocal gen_x_pixel, gen_y_pixel
+            # Convert the x and y coordinates to a 2D array
+            points = np.array([gen_x_pixel, gen_y_pixel]).T
+
+            # Step 1: Identify clusters
+            clustering = DBSCAN(eps=3, min_samples=2).fit(points)
+            labels = clustering.labels_
+
+            # For each cluster
+            for cluster_id in set(labels):
+                if cluster_id == -1:
+                    continue  # Skip noise
+
+                cluster_points = points[labels == cluster_id]
+
+                # Step 2: Determine order along trajectory
+                # This step depends on your specific application
+                # order = determine_order(cluster_points)
+
+                # TODO: Step 3: Fit Gaussian distribution
+                # TODO: Replace the following line with the appropriate code for fitting a Gaussian distribution.
+                # mean, std_dev = norm.fit(order)
+
+
+                # TODO: Step 4: Analyze and visualize results
+                # TODO: Replace the following line with the appropriate code for analyzing and visualizing the results.
+                # analyze_and_visualize(cluster_points, mean, std_dev)
+
 
         def on_listbox_select(event):
             nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
@@ -284,8 +316,14 @@ def create_app():
         canvas.mpl_connect('button_press_event', on_pixel_click)
 
         # Create the "Load Data" button
+
         load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
         load_button.grid(row=1, column=0, sticky='w', padx=200)
+
+        # TODO: ...
+        calculate_button = tk.Button(master=image_window, text="Calculate Trace", command=calculate_trace, width=15,
+                                     height=2)
+        calculate_button.grid(row=1, column=1, sticky='w')
 
         # Create the Treeview widget for displaying time values and weights
         treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
@@ -318,6 +356,7 @@ def create_app():
         # Create the dropdown menu
         dropdown = tk.OptionMenu(image_window, current_choice, "show all time", "show top 3 weight")
         dropdown.grid(row=1, column=1, sticky='w', padx=150)
+
 
     def display_parameters(original_params, fitted_params):
 
