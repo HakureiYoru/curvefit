@@ -10,10 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.animation import FuncAnimation
-from sklearn.cluster import DBSCAN
-from scipy.stats import norm
+
+from matplotlib.colors import PowerNorm
 
 
 def create_app():
@@ -29,34 +27,7 @@ def create_app():
         if image_window is not None:
             image_window.destroy()
 
-        def calculate_trace():
-            nonlocal gen_x_pixel, gen_y_pixel
-            # Convert the x and y coordinates to a 2D array
-            points = np.array([gen_x_pixel, gen_y_pixel]).T
 
-            # Step 1: Identify clusters
-            clustering = DBSCAN(eps=3, min_samples=2).fit(points)
-            labels = clustering.labels_
-
-            # For each cluster
-            for cluster_id in set(labels):
-                if cluster_id == -1:
-                    continue  # Skip noise
-
-                cluster_points = points[labels == cluster_id]
-
-                # Step 2: Determine order along trajectory
-                # This step depends on your specific application
-                # order = determine_order(cluster_points)
-
-                # TODO: Step 3: Fit Gaussian distribution
-                # TODO: Replace the following line with the appropriate code for fitting a Gaussian distribution.
-                # mean, std_dev = norm.fit(order)
-
-
-                # TODO: Step 4: Analyze and visualize results
-                # TODO: Replace the following line with the appropriate code for analyzing and visualizing the results.
-                # analyze_and_visualize(cluster_points, mean, std_dev)
 
 
         def on_listbox_select(event):
@@ -131,7 +102,11 @@ def create_app():
                 print("No selection")
 
         def load_data():
-            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight_points
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight_points, cbar
+
+            if cbar is not None:
+                cbar.remove()
+
             # Remove the old points
             if highlight_points:
                 for p in highlight_points:
@@ -157,6 +132,28 @@ def create_app():
                 # Ensure that the pixel coordinates are within the valid range
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
+
+                # Count the number of fitted points at each pixel
+                counts = np.zeros((detector_height, detector_width))
+                for x, y in zip(gen_x_pixel, gen_y_pixel):
+                    counts[y, x] += 1
+
+                # Clear the 3D plot
+                ax_map.clear()
+
+                # Use PowerNorm instead of Normalize
+                norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
+
+                # Create the image with the new norm
+                im = ax_map.imshow(counts, cmap='viridis', norm=norm, origin='lower')
+
+                # Add a colorbar
+                cbar = plt.colorbar(im, ax=ax_map)
+                cbar.set_label('N-times')
+
+                ax_map.set_title('Detector Time Map')
+                ax_map.set_xlabel('X')
+                ax_map.set_ylabel('Y')
 
                 gen_time_and_weight = []
                 for y, x in zip(gen_y_pixel, gen_x_pixel):
@@ -253,8 +250,10 @@ def create_app():
             x_pixel = int(event.xdata)
             y_pixel = int(event.ydata)
 
-            # Create the stacked area plot for this pixel
-            create_stacked_area_plot(x_pixel, y_pixel)
+            # Check if the clicked axes is one of the desired subplots
+            if event.inaxes in [ax_weight_map, ax_time_map]:  # replace with your actual axes variables
+                # Create the stacked area plot for this pixel
+                create_stacked_area_plot(x_pixel, y_pixel)
 
         counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(
             fit_x, fit_y,
@@ -272,25 +271,24 @@ def create_app():
         # Create a new figure
         fig = plt.figure(figsize=(18, 6))
 
-        # Add the 3D subplot
-        ax_map = fig.add_subplot(131, projection='3d')  # Change this line
+        # Add the 2D subplot
+        ax_map = fig.add_subplot(131)  # Remove the projection='3d'
 
-        # Plot the surface
+        # Plot the heatmap
         X, Y = np.meshgrid(np.arange(detector_width), np.arange(detector_height))
-        ax_map.plot_surface(X, Y, counts, cmap='viridis')
+        # Use PowerNorm instead of Normalize
+        norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
 
-        # Plot the points where ntime = 1
-        mask_ntime_1 = counts == 1
-        ax_map.scatter(X[mask_ntime_1], Y[mask_ntime_1], counts[mask_ntime_1], color='blue')
+        # Create the image with the new norm
+        im = ax_map.imshow(counts, cmap='viridis', norm=norm, origin='lower')
 
-        # Plot the points where ntime > 1
-        mask_ntime_gt_1 = counts > 1
-        ax_map.scatter(X[mask_ntime_gt_1], Y[mask_ntime_gt_1], counts[mask_ntime_gt_1], color='red')
+        # Create a colorbar
+        cbar = plt.colorbar(im, ax=ax_map)
+        cbar.set_label('N-times')
 
         ax_map.set_title('Detector Time Map')
         ax_map.set_xlabel('X')
         ax_map.set_ylabel('Y')
-        ax_map.set_zlabel('N-times')
 
         # Add the weight map heatmap
         ax_weight_map = fig.add_subplot(132)
@@ -320,10 +318,6 @@ def create_app():
         load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
         load_button.grid(row=1, column=0, sticky='w', padx=200)
 
-        # TODO: ...
-        calculate_button = tk.Button(master=image_window, text="Calculate Trace", command=calculate_trace, width=15,
-                                     height=2)
-        calculate_button.grid(row=1, column=1, sticky='w')
 
         # Create the Treeview widget for displaying time values and weights
         treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
