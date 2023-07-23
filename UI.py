@@ -10,10 +10,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
-from sklearn.cluster import DBSCAN
-from sklearn.decomposition import PCA
 from matplotlib.colors import PowerNorm
-
+from sklearn.mixture import GaussianMixture
+from scipy.spatial.distance import cdist
 
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
@@ -136,62 +135,6 @@ def create_app():
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
-                # Apply DBSCAN to the pixel coordinates
-                clustering = DBSCAN(eps=3, min_samples=2).fit(np.vstack([gen_x_pixel, gen_y_pixel]).T)
-
-                # Get the labels of the clusters
-                labels = clustering.labels_
-
-                # Get the number of clusters (ignoring noise if present)
-                n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-
-                print('Estimated number of clusters: %d' % n_clusters)
-
-                # Iterate over the clusters and apply PCA to find the main direction
-                for cluster_id in range(n_clusters):
-                    # Get the points in the current cluster
-                    points = np.vstack([gen_x_pixel[labels == cluster_id], gen_y_pixel[labels == cluster_id]]).T
-
-                    # Apply PCA to the points in the current cluster
-                    pca = PCA(n_components=1)
-                    pca.fit(points)
-
-                    # Get the main direction of the cluster
-                    direction = pca.components_[0]
-
-                    # Get the mean position of the cluster
-                    mean_position = pca.mean_
-
-                    # Calculate the end position of the direction vector
-                    end_position = mean_position + direction * 30  # 30 is the length of the direction vector
-
-                    # Plot the direction vector on ax_map
-                    ax_map.arrow(mean_position[0], mean_position[1], end_position[0], end_position[1],
-                                 head_width=5, head_length=5, fc='red', ec='red')
-
-                    print('Main direction of cluster %d: %s' % (cluster_id, direction))
-
-                # Count the number of fitted points at each pixel
-                counts = np.zeros((detector_height, detector_width))
-                for x, y in zip(gen_x_pixel, gen_y_pixel):
-                    counts[y, x] += 1
-
-
-
-                # Use PowerNorm instead of Normalize
-                norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
-
-                # Create the image with the new norm
-                im = ax_map.imshow(counts, cmap='viridis', norm=norm, origin='lower')
-
-                # Add a colorbar
-                cbar = plt.colorbar(im, ax=ax_map)
-                cbar.set_label('N-times')
-
-                ax_map.set_title('Detector Time Map')
-                ax_map.set_xlabel('X')
-                ax_map.set_ylabel('Y')
-
                 gen_time_and_weight = []
                 for y, x in zip(gen_y_pixel, gen_x_pixel):
                     times = time_map[y, x, :time_counter[y, x]]
@@ -220,6 +163,68 @@ def create_app():
                 # Add the points to the time map heatmap
                 points = ax_time_map.scatter(gen_x_pixel, gen_y_pixel, c='red', s=40)
                 highlight_points.append(points)
+
+                # Apply GMM to the pixel coordinates
+                n_clusters = len(gen_x_pixel) // 100
+                gmm = GaussianMixture(n_components=n_clusters)
+                gmm.fit(np.vstack([gen_x_pixel, gen_y_pixel]).T)
+
+                # Get the labels of the clusters
+                labels = gmm.predict(np.vstack([gen_x_pixel, gen_y_pixel]).T)
+
+                print('Estimated number of clusters: %d' % n_clusters)
+
+                # Count the number of fitted points at each pixel
+                counts = np.zeros((detector_height, detector_width))
+                for x, y in zip(gen_x_pixel, gen_y_pixel):
+                    counts[y, x] += 1
+
+
+                # Iterate over the clusters
+                for cluster_id in range(n_clusters):
+                    # Get the points in the current cluster
+                    points = np.vstack([gen_x_pixel[labels == cluster_id], gen_y_pixel[labels == cluster_id]]).T
+
+                    # Compute the centroid of the cluster
+                    centroid = np.mean(points, axis=0)
+
+                    # Compute the furthest point in the cluster from its centroid
+                    furthest_point = points[cdist([centroid], points).argmax()]
+
+                    # Compute the direction vectors from the centroid to its furthest point
+                    direction = furthest_point - centroid
+
+                    print('Main direction of cluster %d: %s' % (cluster_id, direction))
+
+                    # Plot the direction vector on ax_map
+                    ax_map.arrow(centroid[0], centroid[1], direction[0], direction[1],
+                                 head_width=5, head_length=5, fc='red', ec='red')
+
+                    # Get the times of the points in the current cluster
+                    times = time_map[gen_y_pixel[labels == cluster_id], gen_x_pixel[labels == cluster_id]]
+
+                    # Compute the projection of the points on the direction vector
+                    projections = np.dot(points - centroid, direction)
+
+                    # Sort the times based on the projections
+                    sorted_times = times[np.argsort(projections)]
+
+                    # Update the times of the points in the current cluster
+                    time_map[gen_y_pixel[labels == cluster_id], gen_x_pixel[labels == cluster_id]] = sorted_times
+
+                # Use PowerNorm instead of Normalize
+                norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
+
+                # Create the image with the new norm
+                im = ax_map.imshow(counts, cmap='viridis', norm=norm, origin='lower')
+
+                # Add a colorbar
+                cbar = plt.colorbar(im, ax=ax_map)
+                cbar.set_label('N-times')
+
+                ax_map.set_title('Detector Time Map')
+                ax_map.set_xlabel('X')
+                ax_map.set_ylabel('Y')
 
                 canvas.draw()
 
