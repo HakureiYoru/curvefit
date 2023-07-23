@@ -28,8 +28,75 @@ def create_app():
         if image_window is not None:
             image_window.destroy()
 
+        def on_cluster_listbox_select(event):
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
 
+            # Check if the variables have been initialized
+            if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
+                return
 
+            # Clear the previous scatter plot
+            if highlight:
+                for h in highlight:
+                    h.remove()
+                highlight = []
+
+            # Get the current selection from the cluster_treeview
+            selected = cluster_treeview.selection()
+            if selected:  # If there is a selection
+                # Get the values of the selected row
+                x_str, y_str, t_str, weight_str, weight_time_str = cluster_treeview.item(selected, "values")
+                x = round(float(x_str))
+                y = round(float(y_str))
+
+                # Check if t_str and weight_str are not empty
+                t_values = ast.literal_eval(t_str) if t_str else [0]
+                weight_values = ast.literal_eval(weight_str) if weight_str else [0]
+
+                # Destroy the previous zoom window if it exists
+                if zoom_window is not None:
+                    zoom_window.destroy()
+
+                # Create a new window to display the zoomed view
+                zoom_window = tk.Toplevel()
+                zoom_window.title("Zoomed View")
+                zoom_window.geometry("600x400")  # Set the initial size of the window
+
+                # Create the new figure
+                fig_zoom, ax_zoom = plt.subplots()
+
+                # Plot the time map heatmap
+
+                zoom_size = 20  # Change the size as needed
+                zoomed_first_times = first_times[max(0, y - zoom_size):min(first_times.shape[0], y + zoom_size),
+                                     max(0, x - zoom_size):min(first_times.shape[1], x + zoom_size)]
+                ax_zoom.imshow(zoomed_first_times, cmap='viridis', interpolation='nearest', origin='lower')
+
+                # Highlight the selected point
+                ax_zoom.scatter(zoom_size, zoom_size, c='red')
+
+                # Highlight the selected point
+                for t in t_values:
+                    h = ax_time_map.scatter(x, y, c='magenta', s=200, marker='*')
+                    highlight.append(h)
+
+                # Remove the previous circle if it exists
+                if zoomed_circle is not None:
+                    zoomed_circle.remove()
+
+                # Draw a circle around the zoomed area
+                zoomed_circle = plt.Circle((x, y), zoom_size + 10, fill=False, color='red', linestyle='dashed')
+                ax_time_map.add_patch(zoomed_circle)
+
+                # Add the canvas to the window
+                canvas_zoom = FigureCanvasTkAgg(fig_zoom, master=zoom_window)
+                canvas_zoom.draw()
+                canvas_zoom.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+                # Redraw the figure
+                canvas.draw()
+
+            else:
+                print("No selection")
 
         def on_listbox_select(event):
             nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
@@ -181,6 +248,11 @@ def create_app():
                 for x, y in zip(gen_x_pixel, gen_y_pixel):
                     counts[y, x] += 1
 
+                # Clear the treeview widget
+                cluster_treeview.delete(*cluster_treeview.get_children())
+
+                # Clear the treeview widget
+                treeview.delete(*treeview.get_children())
 
                 # Iterate over the clusters
                 for cluster_id in range(n_clusters):
@@ -197,6 +269,29 @@ def create_app():
                     direction = furthest_point - centroid
 
                     print('Main direction of cluster %d: %s' % (cluster_id, direction))
+
+                    # Compute the time and weight at the centroid
+                    centroid_times = time_map[int(round(centroid[1])), int(round(centroid[0]))]
+                    centroid_weights = weight_time_map[int(round(centroid[1])), int(round(centroid[0]))]
+
+                    # Sort the times and weights by weight
+                    centroid_times_and_weights = sorted(zip(centroid_times, centroid_weights), key=lambda tw: tw[1],
+                                                        reverse=True)
+                    if choice == "show top 3 weight":
+                        centroid_times_and_weights = centroid_times_and_weights[:3]
+
+                    # Separate the times and weights again
+                    centroid_times, centroid_weights = zip(*centroid_times_and_weights)
+
+                    centroid_time_str = str([f"{t:.0f}" for t in centroid_times])
+                    centroid_weight_str = str([f"{w:.3f}" for w in centroid_weights])
+                    centroid_position_weight_str = f"{weight_map[int(round(centroid[1])), int(round(centroid[0]))]:.3f}"
+
+                    # Add the cluster centroid, time, and weights to the cluster Treeview widget
+                    cluster_treeview.insert('', 'end',
+                                            values=(
+                                                centroid[0], centroid[1], centroid_time_str, centroid_weight_str,
+                                                centroid_position_weight_str))  # Add each item to the end of the Treeview
 
                     # Plot the direction vector on ax_map
                     ax_map.arrow(centroid[0], centroid[1], direction[0], direction[1],
@@ -230,8 +325,7 @@ def create_app():
 
                 canvas.draw()
 
-                # Clear the treeview widget
-                treeview.delete(*treeview.get_children())
+
 
                 # Add the times, corresponding x, y points, and weights to the Treeview widget
                 with open('map_result.dat', 'w') as f:
@@ -311,19 +405,15 @@ def create_app():
             delta_time,
             progress_callback)
 
-
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
-        image_window.geometry("800x600")  # Set the initial size of the window
+        image_window.geometry("800x800")  # Set the initial size of the window
         # Configure the image_window to distribute space between rows and columns
-
         image_window.grid_rowconfigure(0, weight=2)  # for the canvas row
         image_window.grid_rowconfigure(2, weight=3)  # for the treeview frame row
         image_window.grid_columnconfigure(0, weight=1)  # for the left part
         image_window.grid_columnconfigure(1, weight=1)  # for the right part
-
-
 
         # Create a new figure
         fig = plt.figure(figsize=(12, 4))
@@ -378,28 +468,30 @@ def create_app():
         treeview_frame = tk.Frame(master=image_window)
         treeview_frame.grid(row=2, column=0, columnspan=2, sticky='nsew', padx=10, pady=10)
 
+        # Configure the treeview frame to distribute space between treeviews
+        treeview_frame.grid_rowconfigure(0, weight=1)  # for the label row
+        treeview_frame.grid_rowconfigure(1, weight=5)  # for the treeview row
+        treeview_frame.grid_columnconfigure(0, weight=1)
+        treeview_frame.grid_columnconfigure(1, weight=1)
+
         # Create labels for the Treeviews
         treeview_label = tk.Label(master=treeview_frame, text="Time Values and Weights")
-        treeview_label.grid(row=0, column=0, sticky='n', padx=10, pady=10)
+        treeview_label.grid(row=0, column=0, sticky='n', padx=10)
         cluster_treeview_label = tk.Label(master=treeview_frame, text="Cluster Point Values")
-        cluster_treeview_label.grid(row=0, column=1, sticky='n', padx=10, pady=10)
+        cluster_treeview_label.grid(row=0, column=1, sticky='n', padx=10)
 
         # Create the Treeview widget for displaying time values and weights
         treeview = ttk.Treeview(master=treeview_frame, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
                                 show="headings")
         treeview.bind('<<TreeviewSelect>>', on_listbox_select)
-        treeview.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        treeview.grid(row=1, column=0, sticky='nsew', padx=10, pady=10)
 
         # Create the Treeview widget for displaying cluster point values
         cluster_treeview = ttk.Treeview(master=treeview_frame, columns=(
             "Cluster X", "Cluster Y", "Cluster Time", "Cluster Time Weight", "Cluster Position Weight"),
                                         show="headings")
-        cluster_treeview.bind('<<TreeviewSelect>>', on_listbox_select)
-        cluster_treeview.grid(row=0, column=1, sticky='nsew', padx=10, pady=10)
-
-        # Configure the treeview frame to distribute space between treeviews
-        treeview_frame.grid_columnconfigure(0, weight=1)
-        treeview_frame.grid_columnconfigure(1, weight=1)
+        cluster_treeview.bind('<<TreeviewSelect>>', on_cluster_listbox_select)
+        cluster_treeview.grid(row=1, column=1, sticky='nsew', padx=10, pady=10)
 
         # Create the variable to store the current choice
         current_choice = tk.StringVar()
@@ -410,7 +502,6 @@ def create_app():
         # Create the dropdown menu
         dropdown = tk.OptionMenu(image_window, current_choice, "show all time", "show top 3 weight")
         dropdown.grid(row=1, column=1, sticky='w', padx=10, pady=10)
-
 
     def display_parameters(original_params, fitted_params):
 
