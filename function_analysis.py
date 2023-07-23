@@ -48,10 +48,6 @@ def xy_fft(gen_x, gen_y):
 
 
 def process_data(gen_x, gen_y, f1, f2):
-    # Find phase difference
-    peak_index_x = np.argmax(gen_x)
-    peak_index_y = np.argmax(gen_y)
-
     # Adjusting the frequency according to the number of points in a cycle
     base_points = 500
     adjustment_factor = base_points / len(gen_x)

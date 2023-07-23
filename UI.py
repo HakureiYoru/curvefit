@@ -14,6 +14,8 @@ from matplotlib.colors import PowerNorm
 from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
 import ast
+from matplotlib.colors import PowerNorm
+
 
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
@@ -120,7 +122,7 @@ def create_app():
                 y = int(y_str)
 
                 # Check if t_str and weight_str are not empty
-                t_values = ast.literal_eval(t_str) if t_str else [0]
+                t_values = [ast.literal_eval(t_str)] if isinstance(t_str, int) else ast.literal_eval(t_str)
                 weight_values = ast.literal_eval(weight_str) if weight_str else [0]
 
                 # Destroy the previous zoom window if it exists
@@ -170,7 +172,7 @@ def create_app():
                 print("No selection")
 
         def load_data():
-            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight_points, cbar
+            nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight_points, cbar, counts
 
             if cbar is not None:
                 cbar.remove()
@@ -309,6 +311,11 @@ def create_app():
                     # Update the times of the points in the current cluster
                     time_map[gen_y_pixel[labels == cluster_id], gen_x_pixel[labels == cluster_id]] = sorted_times
 
+                # Remove the old images
+                if ax_map.images:
+                    for im in ax_map.images:
+                        im.remove()
+
                 # Use PowerNorm instead of Normalize
                 norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
 
@@ -325,12 +332,17 @@ def create_app():
 
                 canvas.draw()
 
-
-
-                # Add the times, corresponding x, y points, and weights to the Treeview widget
                 with open('map_result.dat', 'w') as f:
                     for x, y, times, weight, position in zip(gen_x_pixel, gen_y_pixel, gen_time_str, gen_weight_str,
                                                              position_weight_str):
+                        # Remove quotes, then parse the weight string back into a list of floats
+                        weights = [float(w.replace("'", "")) for w in weight[1:-1].split(", ")]
+
+                        # check if all weights are less than 0.001
+                        if all(w < 0.001 for w in weights):
+                            # if so, skip this point
+                            continue
+
                         # Remove brackets and quotes from the string representation of the lists for display
                         times_display = times[1:-1].replace("'", "")
                         weight_display = weight[1:-1].replace("'", "")
@@ -398,6 +410,53 @@ def create_app():
                 # Create the stacked area plot for this pixel
                 create_stacked_area_plot(x_pixel, y_pixel)
 
+            # Check if the clicked axes is the ax_map
+            if event.inaxes == ax_map:
+                # Create the enlarged view for this pixel
+                count_map_zoom_window(x_pixel, y_pixel)
+
+        def count_map_zoom_window(x_pixel, y_pixel):
+            # Define the size of the area to be enlarged
+            zoom_size = 50
+
+            # Calculate the coordinates of the area to be enlarged
+            x_start = max(0, x_pixel - zoom_size // 2)
+            y_start = max(0, y_pixel - zoom_size // 2)
+            x_end = min(detector_width, x_pixel + zoom_size // 2)
+            y_end = min(detector_height, y_pixel + zoom_size // 2)
+
+            # Extract the area from the counts
+            enlarged_counts = counts[y_start:y_end, x_start:x_end]
+
+            # Create the new window
+            plot_window = tk.Toplevel()
+            plot_window.title("Enlarged View")
+            plot_window.geometry("600x400")  # Set the initial size of the window
+
+            # Add the pixel label
+            pixel_label = tk.Label(master=plot_window, text=f"Pixel: ({x_pixel}, {y_pixel})")
+            pixel_label.pack()
+
+            # Create the new figure
+            fig_enlarged, ax_enlarged = plt.subplots()
+
+            # Create the image
+            im = ax_enlarged.imshow(enlarged_counts, cmap='viridis', interpolation='nearest', origin='lower')
+
+
+            # Create a colorbar
+            cbar = plt.colorbar(im, ax=ax_enlarged)
+            cbar.set_label('N-times')
+
+            ax_enlarged.set_title('Enlarged View')
+            ax_enlarged.set_xlabel('X')
+            ax_enlarged.set_ylabel('Y')
+
+            # Add the canvas to the window
+            canvas_enlarged = FigureCanvasTkAgg(fig_enlarged, master=plot_window)
+            canvas_enlarged.draw()
+            canvas_enlarged.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
         counts, time_map, weight_map, weight_time_map, detector_width, detector_height, time_counter, x_min, y_min = function_analysis.calculate_map(
             fit_x, fit_y,
             pixel_size,
@@ -440,7 +499,7 @@ def create_app():
         # Add the weight map heatmap
         ax_weight_map = fig.add_subplot(132)
         cax3 = ax_weight_map.imshow(weight_map, cmap='viridis', interpolation='nearest',
-                                    origin='lower')
+                                    origin='lower', norm=PowerNorm(0.2))  # use PowerNorm here
         fig.colorbar(cax3, ax=ax_weight_map)
         ax_weight_map.set_title('Weight Map')
         ax_weight_map.set_xlabel('Click on the pixel to see its time weight')
