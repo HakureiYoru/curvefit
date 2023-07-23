@@ -13,6 +13,7 @@ import threading
 from matplotlib.colors import PowerNorm
 from sklearn.mixture import GaussianMixture
 from scipy.spatial.distance import cdist
+import ast
 
 def create_app():
     def create_detector_time_map_ui(fit_x, fit_y, pixel_size, sigma, delta_time, progress_callback=None):
@@ -43,17 +44,17 @@ def create_app():
                     h.remove()
                 highlight = []
 
-            # Get the current selection from the Listbox
+                # Get the current selection from the Listbox
             selected = treeview.selection()
             if selected:  # If there is a selection
                 # Get the values of the selected row
                 x_str, y_str, t_str, weight_str, weight_time_str = treeview.item(selected, "values")
                 x = int(x_str)
                 y = int(y_str)
-                if t_str:  # Check if t_str is not empty
-                    t_values = list(map(float, t_str.split(', ')))
-                else:
-                    t_values = [0]
+
+                # Check if t_str and weight_str are not empty
+                t_values = ast.literal_eval(t_str) if t_str else [0]
+                weight_values = ast.literal_eval(weight_str) if weight_str else [0]
 
                 # Destroy the previous zoom window if it exists
                 if zoom_window is not None:
@@ -152,8 +153,9 @@ def create_app():
                     gen_time, gen_weight = [], []
 
                 # Convert the times and weights to strings and limit to 3 decimal places
-                gen_time_str = [", ".join(f"{t:.0f}" for t in times) for times in gen_time]
-                gen_weight_str = [", ".join(f"{w:.3f}" for w in weights) for weights in gen_weight]
+                gen_time_str = [str([f"{t:.0f}" for t in times]) for times in gen_time]
+                # Convert the weights to strings and limit to 3 decimal places
+                gen_weight_str = [str([f"{w:.3f}" for w in weights]) for weights in gen_weight]
 
                 position_weight = [weight_map[y, x] for y, x in zip(gen_y_pixel, gen_x_pixel)]
 
@@ -235,10 +237,15 @@ def create_app():
                 with open('map_result.dat', 'w') as f:
                     for x, y, times, weight, position in zip(gen_x_pixel, gen_y_pixel, gen_time_str, gen_weight_str,
                                                              position_weight_str):
+                        # Remove brackets and quotes from the string representation of the lists for display
+                        times_display = times[1:-1].replace("'", "")
+                        weight_display = weight[1:-1].replace("'", "")
+
                         treeview.insert('', 'end',
                                         values=(
-                                            x, y, times, weight, position))  # Add each item to the end of the Treeview
-                        f.write(f"{x}, {y}, [{times}], {weight}, {position}\n")  # Write the result to the file
+                                            x, y, times_display, weight_display,
+                                            position))  # Add each item to the end of the Treeview
+                        f.write(f"{x}, {y}, {times}, {weight}, {position}\n")  # Write the result to the file
 
         def create_stacked_area_plot(x_pixel, y_pixel):
             # Get the weights and times for this pixel
@@ -303,15 +310,23 @@ def create_app():
             sigma,
             delta_time,
             progress_callback)
+
+
         # Create a new window to display the image
         image_window = tk.Toplevel()
         image_window.title("Detector Time Map")
         image_window.geometry("800x600")  # Set the initial size of the window
-        image_window.grid_rowconfigure(0, weight=1)
-        image_window.grid_columnconfigure(0, weight=1)
+        # Configure the image_window to distribute space between rows and columns
+
+        image_window.grid_rowconfigure(0, weight=2)  # for the canvas row
+        image_window.grid_rowconfigure(2, weight=3)  # for the treeview frame row
+        image_window.grid_columnconfigure(0, weight=1)  # for the left part
+        image_window.grid_columnconfigure(1, weight=1)  # for the right part
+
+
 
         # Create a new figure
-        fig = plt.figure(figsize=(18, 6))
+        fig = plt.figure(figsize=(12, 4))
 
         # Add the 2D subplot
         ax_map = fig.add_subplot(131)  # Remove the projection='3d'
@@ -350,38 +365,41 @@ def create_app():
         # Add the canvas to the window
         canvas = FigureCanvasTkAgg(fig, master=image_window)
         canvas.draw()
-        canvas.get_tk_widget().grid(row=0, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
+        canvas.get_tk_widget().grid(row=0, column=0, columnspan=2, sticky='nsew', padx=10, pady=10)
 
         # Bind the mouse click event to the on_pixel_click function
         canvas.mpl_connect('button_press_event', on_pixel_click)
 
         # Create the "Load Data" button
-
         load_button = tk.Button(master=image_window, text="Load Data", command=load_data, width=15, height=2)
-        load_button.grid(row=1, column=0, sticky='w', padx=200)
+        load_button.grid(row=1, column=0, sticky='w', padx=10, pady=10)
 
+        # Create a new frame to hold the treeviews
+        treeview_frame = tk.Frame(master=image_window)
+        treeview_frame.grid(row=2, column=0, columnspan=2, sticky='nsew', padx=10, pady=10)
+
+        # Create labels for the Treeviews
+        treeview_label = tk.Label(master=treeview_frame, text="Time Values and Weights")
+        treeview_label.grid(row=0, column=0, sticky='n', padx=10, pady=10)
+        cluster_treeview_label = tk.Label(master=treeview_frame, text="Cluster Point Values")
+        cluster_treeview_label.grid(row=0, column=1, sticky='n', padx=10, pady=10)
 
         # Create the Treeview widget for displaying time values and weights
-        treeview = ttk.Treeview(master=image_window, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
+        treeview = ttk.Treeview(master=treeview_frame, columns=("X", "Y", "Time", "Time Weight", "Position Weight"),
                                 show="headings")
+        treeview.bind('<<TreeviewSelect>>', on_listbox_select)
+        treeview.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
 
-        # Set the column headings and alignments
-        treeview.heading("X", text="X", anchor='center')
-        treeview.heading("Y", text="Y", anchor='center')
-        treeview.heading("Time", text="Time", anchor='center')
-        treeview.heading("Time Weight", text="Time Weight", anchor='center')
-        treeview.heading("Position Weight", text="Position Weight", anchor='center')
+        # Create the Treeview widget for displaying cluster point values
+        cluster_treeview = ttk.Treeview(master=treeview_frame, columns=(
+            "Cluster X", "Cluster Y", "Cluster Time", "Cluster Time Weight", "Cluster Position Weight"),
+                                        show="headings")
+        cluster_treeview.bind('<<TreeviewSelect>>', on_listbox_select)
+        cluster_treeview.grid(row=0, column=1, sticky='nsew', padx=10, pady=10)
 
-        # Set the column alignments
-        treeview.column("X", anchor='center')
-        treeview.column("Y", anchor='center')
-        treeview.column("Time", anchor='center')
-        treeview.column("Time Weight", anchor='center')
-        treeview.column("Position Weight", anchor='center')
-
-        treeview.bind('<<TreeviewSelect>>',
-                      on_listbox_select)  # Bind the selection event to the on_listbox_select function
-        treeview.grid(row=2, column=0, columnspan=2, sticky='nsew', padx=150, pady=15)
+        # Configure the treeview frame to distribute space between treeviews
+        treeview_frame.grid_columnconfigure(0, weight=1)
+        treeview_frame.grid_columnconfigure(1, weight=1)
 
         # Create the variable to store the current choice
         current_choice = tk.StringVar()
@@ -391,7 +409,7 @@ def create_app():
 
         # Create the dropdown menu
         dropdown = tk.OptionMenu(image_window, current_choice, "show all time", "show top 3 weight")
-        dropdown.grid(row=1, column=1, sticky='w', padx=150)
+        dropdown.grid(row=1, column=1, sticky='w', padx=10, pady=10)
 
 
     def display_parameters(original_params, fitted_params):
