@@ -10,7 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import function_analysis
 import threading
-
+from sklearn.cluster import DBSCAN
+from sklearn.decomposition import PCA
 from matplotlib.colors import PowerNorm
 
 
@@ -124,6 +125,8 @@ def create_app():
 
                 # Get the current choice from the dropdown menu
                 choice = current_choice.get()
+                # Clear the 3D plot
+                ax_map.clear()
 
                 # Calculate the pixel coordinates of the newly loaded data
                 gen_x_pixel = np.floor((gen_x_map - x_min) / pixel_size).astype(int)
@@ -133,13 +136,47 @@ def create_app():
                 gen_x_pixel = np.clip(gen_x_pixel, 0, time_map.shape[1] - 1)
                 gen_y_pixel = np.clip(gen_y_pixel, 0, time_map.shape[0] - 1)
 
+                # Apply DBSCAN to the pixel coordinates
+                clustering = DBSCAN(eps=3, min_samples=2).fit(np.vstack([gen_x_pixel, gen_y_pixel]).T)
+
+                # Get the labels of the clusters
+                labels = clustering.labels_
+
+                # Get the number of clusters (ignoring noise if present)
+                n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+
+                print('Estimated number of clusters: %d' % n_clusters)
+
+                # Iterate over the clusters and apply PCA to find the main direction
+                for cluster_id in range(n_clusters):
+                    # Get the points in the current cluster
+                    points = np.vstack([gen_x_pixel[labels == cluster_id], gen_y_pixel[labels == cluster_id]]).T
+
+                    # Apply PCA to the points in the current cluster
+                    pca = PCA(n_components=1)
+                    pca.fit(points)
+
+                    # Get the main direction of the cluster
+                    direction = pca.components_[0]
+
+                    # Get the mean position of the cluster
+                    mean_position = pca.mean_
+
+                    # Calculate the end position of the direction vector
+                    end_position = mean_position + direction * 30  # 30 is the length of the direction vector
+
+                    # Plot the direction vector on ax_map
+                    ax_map.arrow(mean_position[0], mean_position[1], end_position[0], end_position[1],
+                                 head_width=5, head_length=5, fc='red', ec='red')
+
+                    print('Main direction of cluster %d: %s' % (cluster_id, direction))
+
                 # Count the number of fitted points at each pixel
                 counts = np.zeros((detector_height, detector_width))
                 for x, y in zip(gen_x_pixel, gen_y_pixel):
                     counts[y, x] += 1
 
-                # Clear the 3D plot
-                ax_map.clear()
+
 
                 # Use PowerNorm instead of Normalize
                 norm = PowerNorm(gamma=0.5, vmin=counts.min(), vmax=counts.max())
