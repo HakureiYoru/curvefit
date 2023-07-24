@@ -42,8 +42,8 @@ def run_fit(f2_real = None, f1_real = None, x=None, y=None, params=None, bounds_
     A2 = params.get('A_x2', 0)
     B1 = params.get('B_y1', 0)
     B2 = params.get('B_y2', 0)
-    w1 = params.get('f1', 0) * 2 * np.pi * 20
-    w2 = params.get('f2', 0) * 2 * np.pi * 20
+    w1 = params.get('f1', 0) * 2 * np.pi
+    w2 = params.get('f2', 0) * 2 * np.pi
     p1 = params.get('p_x1', 0)
     p2 = params.get('p_y1', 0)
     p3 = params.get('p_x2', 0)
