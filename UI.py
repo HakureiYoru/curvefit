@@ -33,6 +33,10 @@ def create_app():
         def on_cluster_listbox_select(event):
             nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
 
+            # Remove old zoom window
+            if zoom_window is not None:
+                zoom_window.destroy()
+
             # Check if the variables have been initialized
             if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
                 return
@@ -50,10 +54,10 @@ def create_app():
                 x_str, y_str, t_str, weight_str, weight_time_str = cluster_treeview.item(selected, "values")
                 x = round(float(x_str))
                 y = round(float(y_str))
-
+                # Replace 'nan' with 'None'
+                t_str = t_str.replace('nan', 'None')
                 # Check if t_str and weight_str are not empty
                 t_values = ast.literal_eval(t_str) if t_str else [0]
-                weight_values = ast.literal_eval(weight_str) if weight_str else [0]
 
                 # Destroy the previous zoom window if it exists
                 if zoom_window is not None:
@@ -102,6 +106,10 @@ def create_app():
 
         def on_listbox_select(event):
             nonlocal gen_x_pixel, gen_y_pixel, gen_time, ax_time_map, highlight, zoom_window, zoomed_circle
+
+            # Remove old zoom window
+            if zoom_window is not None:
+                zoom_window.destroy()
 
             # Check if the variables have been initialized
             if gen_x_pixel is None or gen_y_pixel is None or gen_time is None:
@@ -157,7 +165,7 @@ def create_app():
                     zoomed_circle.remove()
 
                 # Draw a circle around the zoomed area
-                zoomed_circle = plt.Circle((x, y), zoom_size+10, fill=False, color='red', linestyle='dashed')
+                zoomed_circle = plt.Circle((x, y), zoom_size + 10, fill=False, color='red', linestyle='dashed')
                 ax_time_map.add_patch(zoomed_circle)
 
                 # Add the canvas to the window
@@ -289,10 +297,15 @@ def create_app():
                     centroid_weight_str = str([f"{w:.3f}" for w in centroid_weights])
                     centroid_position_weight_str = f"{weight_map[int(round(centroid[1])), int(round(centroid[0]))]:.3f}"
 
+                    # Remove brackets and quotes from the string representation of the lists for display
+                    centroid_times_display = centroid_time_str[1:-1].replace("'", "")
+                    centroid_weight_display = centroid_weight_str[1:-1].replace("'", "")
+
                     # Add the cluster centroid, time, and weights to the cluster Treeview widget
                     cluster_treeview.insert('', 'end',
                                             values=(
-                                                centroid[0], centroid[1], centroid_time_str, centroid_weight_str,
+                                                centroid[0], centroid[1], centroid_times_display,
+                                                centroid_weight_display,
                                                 centroid_position_weight_str))  # Add each item to the end of the Treeview
 
                     # Plot the direction vector on ax_map
@@ -416,8 +429,14 @@ def create_app():
                 count_map_zoom_window(x_pixel, y_pixel)
 
         def count_map_zoom_window(x_pixel, y_pixel):
+            nonlocal plot_window
+
+            # Remove old window
+            if plot_window:
+                plot_window.destroy()
+
             # Define the size of the area to be enlarged
-            zoom_size = 50
+            zoom_size = 100
 
             # Calculate the coordinates of the area to be enlarged
             x_start = max(0, x_pixel - zoom_size // 2)
@@ -442,7 +461,6 @@ def create_app():
 
             # Create the image
             im = ax_enlarged.imshow(enlarged_counts, cmap='viridis', interpolation='nearest', origin='lower')
-
 
             # Create a colorbar
             cbar = plt.colorbar(im, ax=ax_enlarged)
@@ -953,6 +971,7 @@ def create_app():
     param_window = None
     image_window = None
     zoom_window = None
+    plot_window = None
 
     ax_time_map = None  # Initialize ax_time_map
     # Initial value 0.05
