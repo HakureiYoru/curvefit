@@ -128,7 +128,8 @@ def create_app():
                 x_str, y_str, t_str, weight_str, weight_time_str = treeview.item(selected, "values")
                 x = int(x_str)
                 y = int(y_str)
-
+                # Replace 'nan' with 'None'
+                t_str = t_str.replace('nan', 'None')
                 # Check if t_str and weight_str are not empty
                 t_values = [ast.literal_eval(t_str)] if isinstance(t_str, int) else ast.literal_eval(t_str)
                 weight_values = ast.literal_eval(weight_str) if weight_str else [0]
