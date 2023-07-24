@@ -723,8 +723,12 @@ def create_app():
 
             f = analysis_results["gen_x_frequencies"]
 
-            f1 = f[0] * 20
-            f2 = f[1] * 20
+            if len(f) == 1:
+                f1 = f[0]
+                f2 = f1
+            elif len(f) >= 2:
+                f1 = f[0]
+                f2 = f[1]
 
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')

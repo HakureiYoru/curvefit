@@ -7,13 +7,13 @@ def xy_fft(gen_x, gen_y):
     ft_gen_x = np.fft.rfft(gen_x)
     abs_ft_gen_x = np.abs(ft_gen_x) / (len(gen_x) / 2)
     angle_ft_gen_x = np.angle(ft_gen_x)
-    freq_gen_x = np.fft.rfftfreq(len(gen_x))
+    freq_gen_x = np.fft.rfftfreq(len(gen_x), d=1/20)
 
     # Fourier transform of gen_y
     ft_gen_y = np.fft.rfft(gen_y)
     abs_ft_gen_y = np.abs(ft_gen_y) / (len(gen_y) / 2)
     angle_ft_gen_y = np.angle(ft_gen_y)
-    freq_gen_y = np.fft.rfftfreq(len(gen_y))
+    freq_gen_y = np.fft.rfftfreq(len(gen_y), d=1/20)
 
     results = {
         "gen_x_amplitudes": [],
