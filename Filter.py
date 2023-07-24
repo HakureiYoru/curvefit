@@ -36,14 +36,14 @@ def objective_function(params, x_obs, y_obs):
 
 
 # Main function to perform the fitting
-def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_count=None, progress_callback=None):
+def run_fit(f2_real = None, f1_real = None, x=None, y=None, params=None, bounds_factor_dict=None, filter_press_count=None, progress_callback=None):
     # Extracting parameters from the input dictionary
     A1 = params.get('A_x1', 0)
     A2 = params.get('A_x2', 0)
     B1 = params.get('B_y1', 0)
     B2 = params.get('B_y2', 0)
-    w1 = params.get('f1', 0) * 2 * np.pi
-    w2 = params.get('f2', 0) * 2 * np.pi
+    w1 = params.get('f1', 0) * 2 * np.pi * 20
+    w2 = params.get('f2', 0) * 2 * np.pi * 20
     p1 = params.get('p_x1', 0)
     p2 = params.get('p_y1', 0)
     p3 = params.get('p_x2', 0)
@@ -76,8 +76,17 @@ def run_fit(x=None, y=None, params=None, bounds_factor_dict=None, filter_press_c
     # Extract the fitted parameters
     fitted_params = result.x
 
-    # Generate the fitted x and y values
-    t_fit = np.linspace(0, 10, 1000)
+    # Assume f2_real and f1_real are defined somewhere
+    min_freq = min(f2_real, f1_real)
+
+    # Check if the minimal frequency is not zero to avoid division by zero
+    if min_freq != 0:
+        # Calculate the real number of time points
+        real_time_points = (1 / min_freq) * 1000
+
+        # Generate the fitted x and y values
+        t_fit = np.linspace(0, 10, int(real_time_points))
+
     x_fit, y_fit = parametric_equations(t_fit, fitted_params)
 
     # Note that this time is really just for end0.

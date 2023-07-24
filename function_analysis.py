@@ -47,16 +47,6 @@ def xy_fft(gen_x, gen_y):
     return results
 
 
-def process_data(gen_x, gen_y, f1, f2):
-    # Adjusting the frequency according to the number of points in a cycle
-    base_points = 500
-    adjustment_factor = base_points / len(gen_x)
-
-    # Adjust the frequency because we only use one period of data
-    f1 = f1 / adjustment_factor
-    f2 = f2 / adjustment_factor
-
-    return {"f1": f1, "f2": f2}
 
 
 def keep_one_period(gen_x, gen_y):

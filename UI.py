@@ -693,13 +693,13 @@ def create_app():
         canvas.draw()
 
     def load_file():
-        nonlocal gen_x, gen_y, data_loaded, params, parameters_loaded, t_measured, previous_window, bounds_factor_dict
+        nonlocal gen_x, gen_y, data_loaded, params, parameters_loaded, t_measured, previous_window, bounds_factor_dict, f2_real, f1_real
         file_path = filedialog.askopenfilename(filetypes=[('All Files', '*.*'), ('Data Files', '*.dat')])
         if file_path:
             df = pd.read_csv(file_path, header=None, sep=" ")
             parameters_data, data = df.iloc[0], df.iloc[1:]
 
-            f2, f1, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val
+            f2_real, f1_real, _, _, _, _, _, _ = [float(val[1:]) if isinstance(val, str) and val.startswith('#') else val for val
                                         in parameters_data.values]  # to remove "#" before f1
             gen_x, gen_y = data[0].values, data[1].values
 
@@ -721,19 +721,15 @@ def create_app():
             B_y = analysis_results["gen_y_amplitudes"]
             p_y = analysis_results["gen_y_phases"]
 
-            # Process the data to find phase difference
-            processed_data = function_analysis.process_data(gen_x, gen_y, f1, f2)
+            f = analysis_results["gen_x_frequencies"]
 
-            f1 = processed_data["f1"]
-            f2 = processed_data["f2"]
+            f1 = f[0]
+            f2 = f[1]
 
             if auto_scale_var.get() == 1:
                 ax.set_aspect('equal', 'box')
             else:
                 ax.set_aspect('auto')  # Reset to the default aspect
-
-            # params = {'A': A[0], 'B': B[0], 'w1': w1, 'w2': w2, 'p1': 0, 'p2': phase_difference_in_pi * np.pi,
-            #           'n': len(gen_x)}
 
             params = {
                 'f1': f1,
@@ -830,7 +826,7 @@ def create_app():
 
     def run_fit_in_thread(x, y, params, filter_press_count, progress_var, progress_window, status_label, pixel_size,
                           sigma, delta_time):
-
+        nonlocal f2_real, f1_real
         try:
             def progress_callback(xk, convergence, progress_range=(0, 50)):
                 # We divide the progress bar into two parts, this callback function is used to update the first half
@@ -845,7 +841,7 @@ def create_app():
             # Set the labelled text to the fitting process
             status_label.config(text="Fitting in progress...")
 
-            fit_results = run_fit(x, y, params, bounds_factor_dict, filter_press_count,
+            fit_results = run_fit(f2_real, f1_real , x, y, params, bounds_factor_dict, filter_press_count,
                                   progress_callback=progress_callback)
             fitted_params = fit_results["fitted_params"]
 
@@ -962,6 +958,7 @@ def create_app():
         Fit(pixel_size, sigma, delta_time)
 
     # Initialize
+    f2_real, f1_real = None, None
     data_loaded = False
     parameters_loaded = False
     filter_press_count = 0  # initialize counter at global scope
